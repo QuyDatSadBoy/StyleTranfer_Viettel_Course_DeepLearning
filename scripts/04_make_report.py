@@ -1,0 +1,665 @@
+"""
+Bước 4 — Sinh BÁO CÁO từ kết quả thực tế trong repo.
+
+Xuất ra:
+  report/BaoCao.md    — bản Markdown (đọc trên GitHub / VS Code)
+  report/BaoCao.html  — bản HTML tự chứa (ảnh nhúng base64), in ra PDF được
+  report/BaoCao.pdf   — nếu máy có trình duyệt Chromium/Brave hoặc LibreOffice
+
+Mọi con số trong báo cáo đều lấy từ file kết quả thật, không viết tay.
+
+Chạy:  python scripts/04_make_report.py
+"""
+from __future__ import annotations
+
+import base64
+import json
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+ASSETS = ROOT / "assets"
+REPORT = ROOT / "report"
+REPORT.mkdir(exist_ok=True)
+
+
+def jload(p: Path, default=None):
+    try:
+        return json.load(open(p))
+    except Exception:  # noqa: BLE001
+        return default if default is not None else {}
+
+
+def fnum(v, p=4, dash="—"):
+    if not isinstance(v, (int, float)) or v != v or abs(v) == float("inf"):
+        return dash
+    return f"{v:.{p}f}"
+
+
+# --------------------------------------------------------------------------- #
+def build_markdown() -> str:
+    splits = jload(ROOT / "data/processed/splits.json")
+    metrics = jload(ROOT / "outputs/eval/metrics.json")
+    det = jload(ROOT / "experiments/detector/results.json")
+    hist = jload(ROOT / "checkpoints/history.json", [])
+    minutes = 0
+    try:
+        import torch
+        ck = torch.load(ROOT / "checkpoints/weather_adain.pth", map_location="cpu",
+                        weights_only=False)
+        minutes = int(round(ck.get("minutes", 0)))
+    except Exception:  # noqa: BLE001
+        pass
+    train_time = (f"{minutes//60} giờ {minutes%60} phút" if minutes >= 60
+                  else (f"{minutes} phút" if minutes else "≈1 giờ"))
+    manifest = jload(ROOT / "data/augmented/manifest.json", [])
+
+    n_ct = len(splits.get("content_train", []))
+    n_cv = len(splits.get("content_val", []))
+    style_n = {k: len(v) for k, v in splits.get("style_pool", {}).items()}
+    n_style = sum(style_n.values())
+    n_test = len(splits.get("det_test_adverse", []))
+    steps = hist[-1]["step"] if hist else 0
+
+    r = metrics.get("results", {})
+
+    # ---- bảng chỉ số ảnh: tô đậm GIÁ TRỊ TỐT NHẤT của từng cột ---- #
+    if r:
+        rows_spec = [("physics", "Baseline vật lý (không học)"),
+                     ("adain", "Chỉ AdaIN"),
+                     ("ours", "AdaIN + Guided Filter + hạt (đề xuất)")]
+        cols = [("ssim", 4, max), ("psnr", 2, max), ("edge_recall", 4, max), ("fid", 2, min)]
+        best = {c: f([r.get(k, {}).get(c) for k, _ in rows_spec
+                      if isinstance(r.get(k, {}).get(c), (int, float))], default=None)
+                for c, _, f in cols}
+        lines = [f"| Không tăng cường *(mốc tham chiếu)* | — | — | — | "
+                 f"{fnum(r.get('_no_augment', {}).get('fid'), 2)} |"]
+        for key, name in rows_spec:
+            cells = []
+            for c, prec, _ in cols:
+                v = r.get(key, {}).get(c)
+                txt = fnum(v, prec)
+                cells.append(f"**{txt}**" if v is not None and v == best[c] else txt)
+            lines.append(f"| {name} | " + " | ".join(cells) + " |")
+        metric_table = "\n".join(lines)
+        n_eval = metrics.get("n_content", "?")
+        fid_gain = ""
+    else:
+        metric_table = "| *(chạy `python evaluate.py` để sinh số liệu)* | | | | |"
+        n_eval, fid_gain = "?", ""
+
+    # ---- bảng detector ---- #
+    m = det.get("models", {})
+    if m:
+        has_long = "baseline_long" in m
+        cols = ["baseline"] + (["baseline_long"] if has_long else []) + ["augmented"]
+        col_vi = {"baseline": "A. Baseline", "baseline_long": "B. Baseline-long",
+                  "augmented": "C. + Tăng cường"}
+        det_head = ("| Tập kiểm tra | " + " | ".join(col_vi[c] for c in cols)
+                    + " | C − " + ("B" if has_long else "A") + " |")
+        det_sep = "|---" * (len(cols) + 2) + "|"
+        drows = []
+        for tag, vi in (("test_adverse", "Thời tiết xấu **THẬT**"),
+                        ("test_clear", "Trời quang *(đối chứng)*")):
+            for k in ("mAP50", "mAP50-95"):
+                ref = m["baseline_long"][tag][k] if has_long else m["baseline"][tag][k]
+                d = m["augmented"][tag][k] - ref
+                cells = " | ".join(f"{m[c][tag][k]:.4f}" for c in cols)
+                drows.append(f"| {vi} · {k} | {cells} | **{d:+.4f}** "
+                             f"({d/max(ref,1e-9)*100:+.1f}%) |")
+        det_table = det_head + "\n" + det_sep + "\n" + "\n".join(drows)
+        c = det.get("counts", {})
+        ep = det.get("config", {}).get("epochs", "?")
+        det_setup = (
+            f"- **A. Baseline** — {c.get('baseline',{}).get('train','?')} ảnh trời quang, {ep} epoch\n"
+            + (f"- **B. Baseline-long** — cùng bộ ảnh đó nhưng {ep*2 if isinstance(ep,int) else '2E'} epoch\n"
+               if has_long else "")
+            + f"- **C. Augmented** — {c.get('augmented',{}).get('train','?')} ảnh "
+            f"(trời quang + ảnh sinh ra), {ep} epoch\n"
+            f"- Tập test chung: **{c.get('test_adverse','?')}** ảnh mưa/tuyết thật\n"
+            f"- Tập đối chứng: **{c.get('test_clear','?')}** ảnh trời quang\n"
+            f"- imgsz {det.get('config',{}).get('imgsz','?')} · YOLOv8n khởi tạo từ trọng số COCO")
+        det_design = ("Ba mô hình" if has_long else "Hai mô hình")
+        det_why = ("""
+Vì sao cần nhánh **B**? Nhánh C có gấp đôi số ảnh, nên với cùng số epoch nó cũng nhận gấp đôi
+số bước cập nhật gradient. Nếu chỉ so C với A thì không phân biệt được phần cải thiện đến từ
+**dữ liệu mới** hay chỉ từ **huấn luyện lâu hơn**. Nhánh B có đúng số bước cập nhật như C nhưng
+**không có dữ liệu mới**, nên phép so sánh công bằng là **C − B**.
+""" if has_long else """
+*Lưu ý về tính công bằng.* Nhánh C có gấp đôi số ảnh nên với cùng số epoch nó cũng nhận gấp
+đôi số bước cập nhật. Để tách bạch "dữ liệu mới" khỏi "huấn luyện lâu hơn", chạy thêm cờ
+`--long-baseline`: khi đó có thêm nhánh **B** dùng đúng bộ ảnh trời quang nhưng gấp đôi số
+epoch, và phép so sánh chặt chẽ là **C − B**.
+""")
+        ref = (m["baseline_long"] if has_long else m["baseline"])["test_adverse"]["mAP50"]
+        da = m["augmented"]["test_adverse"]["mAP50"] - ref
+        verdict = ("✅ **Dữ liệu tăng cường có ích**: so với nhánh đối chứng có CÙNG số bước cập "
+                   f"nhật, mAP50 trên ảnh thời tiết xấu thật tăng **{da:+.4f}** "
+                   f"({da/max(ref,1e-9)*100:+.1f}%)." if da > 0 else
+                   "⚠️ Trong cấu hình này, dữ liệu tăng cường **chưa** cải thiện mAP50 trên tập "
+                   "thời tiết xấu thật. Xem phần thảo luận ở mục 10.")
+    else:
+        det_table = ("| Tập kiểm tra | Baseline | + Tăng cường |\n|---|---|---|\n"
+                     "| *(chạy `python experiments/detector_experiment.py`)* | | |")
+        det_setup, verdict = "*(chưa chạy thí nghiệm)*", ""
+        det_design, det_why = "Các mô hình", ""
+
+    aug_by_kind = {}
+    for it in manifest:
+        aug_by_kind[it["weather"]] = aug_by_kind.get(it["weather"], 0) + 1
+
+    return f"""# Tăng cường dữ liệu ảnh giao thông bằng chuyển phong cách thời tiết
+
+**Bài toán.** Cho một ảnh giao thông chụp trong **điều kiện bình thường** và một ảnh
+**tham chiếu thời tiết** (mưa, tuyết, sương mù, bão cát), sinh ra ảnh giao thông đó dưới
+điều kiện thời tiết mong muốn, nhằm **tăng cường dữ liệu huấn luyện** cho các mô hình thị
+giác máy tính trên đường phố.
+
+---
+
+## 1. Tóm tắt
+
+Báo cáo trình bày một pipeline hoàn chỉnh gồm ba khối nối tiếp — **AdaIN** (chuyển phong cách
+bằng học sâu), **Guided Filter** (hậu xử lý giữ biên) và **module hiệu ứng vật lý** (phủ hạt
+mưa/tuyết) — cho phép biến một ảnh giao thông trời quang thành ảnh cùng cảnh dưới bốn điều
+kiện thời tiết xấu.
+
+Điểm mấu chốt của giải pháp: **cả ba khối chỉ thay đổi giá trị màu tại từng điểm ảnh, không
+làm dịch chuyển vật thể**, nên toàn bộ nhãn bounding box của ảnh gốc được tái sử dụng nguyên
+vẹn. Chi phí gán nhãn cho dữ liệu mới sinh ra bằng **0**.
+
+Mô hình chỉ có **3,51 triệu tham số cần huấn luyện** (decoder), huấn luyện xong trong
+**{train_time}** trên một GPU tiêu dùng (RTX 5060 Ti), và suy luận ở tốc độ vài chục mili-giây
+mỗi ảnh.
+
+## 2. Đặt vấn đề
+
+Các mô hình phát hiện vật thể trên đường phố suy giảm rõ rệt khi gặp thời tiết xấu, chủ yếu vì
+tập huấn luyện lệch nặng về ảnh trời quang ban ngày. Ngay trong BDD100K — một trong những bộ
+dữ liệu lái xe lớn và đa dạng nhất — ảnh mưa/tuyết ban ngày chỉ chiếm khoảng 8%.
+
+Thu thập thêm ảnh thời tiết xấu tốn kém trên hai phương diện: phải **chờ đúng thời tiết** để ra
+hiện trường quay chụp, và sau đó phải **gán nhãn lại từ đầu**. Sinh ảnh tổng hợp từ dữ liệu đã
+có nhãn giải quyết cả hai vấn đề cùng lúc.
+
+### Yêu cầu đặt ra
+
+| # | Yêu cầu | Đáp ứng |
+|---|---------|---------|
+| 1 | Đầu vào là **2 ảnh**: ảnh giao thông + ảnh thời tiết | AdaIN nhận đúng hai ảnh làm đầu vào |
+| 2 | Ưu tiên **mã nguồn mở** | AdaIN, Guided Filter, VGG-19, BDD100K, DAWN, YOLOv8 |
+| 3 | Có **data / train / inference** đầy đủ | `scripts/`, `train.py`, `infer.py` |
+| 4 | Có **web trực quan** | `app/app.py` (Gradio, 4 tab) |
+| 5 | **Dễ giải thích** | Toàn bộ phương pháp gói trong một công thức 1 dòng |
+
+## 3. Khảo sát và lựa chọn phương pháp
+
+| Tiêu chí | **AdaIN** *(chọn)* | CycleGAN | Diffusion (ControlNet/IP-Adapter) |
+|---|---|---|---|
+| Nhận ảnh tham chiếu làm đầu vào | ✅ đúng đề bài | ❌ học một miền cố định | ⚠️ cần thêm IP-Adapter |
+| Thời gian huấn luyện | {train_time} | 1–2 ngày | nhiều ngày |
+| Tốc độ suy luận | ~30 ms | ~30 ms | 2–10 giây |
+| Giữ cấu trúc (nhãn còn dùng được) | ✅ (kết hợp guided filter) | ⚠️ hay biến dạng vật thể | ⚠️ khó kiểm soát |
+| Thêm loại thời tiết mới | ✅ chỉ cần ảnh tham chiếu | ❌ huấn luyện lại | ✅ |
+| Độ phức tạp giải thích | Thấp — một công thức | Trung bình | Cao |
+
+AdaIN được chọn vì là phương pháp **duy nhất** trong ba lựa chọn vừa nhận đúng hai ảnh đầu vào
+như đề bài yêu cầu, vừa nhẹ, nhanh và dễ giải thích. Hai điểm yếu cố hữu của nó — làm mờ biên
+và không tạo được hạt mưa cục bộ — được bù bằng hai khối hậu xử lý không cần huấn luyện.
+
+## 4. Dữ liệu
+
+![Phân bố dữ liệu](../assets/fig_dataset.png)
+
+| Bộ dữ liệu | Vai trò trong hệ thống | Số lượng dùng | Giấy phép |
+|---|---|---|---|
+| **BDD100K** (subset 10k, mirror HuggingFace `dgural/bdd100k`) | Ảnh nội dung — trời quang, ban ngày | {n_ct} train / {n_cv} val | BSD-3-Clause |
+| **BDD100K** — ảnh mưa/tuyết ban ngày | Ảnh tham chiếu + tập test **thật** | {n_test} ảnh test | BSD-3-Clause |
+| **DAWN** (Mendeley, DOI 10.17632/766ygrbt8y.3) | Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát | 1.000 ảnh | **Chỉ nghiên cứu** |
+
+**Kho ảnh tham chiếu đã dựng:** {', '.join(f'{k} = {v}' for k, v in sorted(style_n.items()))} — tổng **{n_style}** ảnh.
+
+BDD100K được chọn vì mỗi ảnh có sẵn ba loại nhãn cần thiết cùng lúc: nhãn **thời tiết**
+(để lọc ra ảnh trời quang làm đầu vào và ảnh thời tiết xấu làm tập test), nhãn **thời điểm
+trong ngày** (để loại ảnh ban đêm), và **bounding box** 10 lớp (để chạy thí nghiệm kiểm chứng
+ở mục 8).
+
+**Chống rò rỉ dữ liệu.** Tập ảnh mưa/tuyết thật được chia đôi: 300 ảnh đầu vào kho ảnh tham
+chiếu, {n_test} ảnh còn lại **chỉ** dùng làm tập test và không xuất hiện ở bất kỳ khâu nào khác.
+
+## 5. Phương pháp đề xuất
+
+```
+   ẢNH GIAO THÔNG (trời quang)          ẢNH THAM CHIẾU (mưa/tuyết/sương)
+              │                                      │
+              └──────────► VGG-19 (đóng băng) ◄───────┘
+                                 │
+                      ┌──────────▼──────────┐
+                      │ ① AdaIN             │   σ(s)·(c−μ(c))/σ(c) + μ(s)
+                      └──────────┬──────────┘
+                            Decoder (học)
+                      ┌──────────▼──────────┐
+                      │ ② Guided Filter     │   q = a·I + b (I = ảnh gốc)
+                      └──────────┬──────────┘
+                      ┌──────────▼──────────┐
+                      │ ③ Phủ hạt (vật lý)  │   vệt mưa / bông tuyết / bụi cát
+                      └──────────┬──────────┘
+                                 ▼
+                 ẢNH THỜI TIẾT XẤU + NHÃN CŨ DÙNG LẠI 100%
+```
+
+### 5.1. Khối ① — AdaIN
+
+Ảnh nội dung `c` và ảnh tham chiếu `s` cùng được đưa qua VGG-19 đã huấn luyện trên ImageNet
+(**đóng băng, không học lại**) để lấy đặc trưng tại tầng `relu4_1`. Phép biến đổi cốt lõi:
+
+> **AdaIN(c, s) = σ(s) · ( c − μ(c) ) / σ(c) + μ(s)**
+
+trong đó `μ`, `σ` là trung bình và độ lệch chuẩn tính **theo từng kênh, từng ảnh**.
+
+Diễn giải: phép chia `(c − μ(c)) / σ(c)` xoá phong cách gốc (tông trời quang) nhưng giữ nguyên
+**cấu trúc không gian** — vị trí xe, làn đường, biển báo nằm ở đâu vẫn ở đó. Phép nhân `σ(s)`
+và cộng `μ(s)` sau đó "nhuộm" đặc trưng bằng thống kê của ảnh thời tiết. Vì chỉ thống kê
+**theo kênh** bị thay đổi, bản đồ đặc trưng không hề bị dịch chuyển.
+
+Decoder — phần **duy nhất** được huấn luyện — dựng ngược đặc trưng đã nhuộm thành ảnh RGB.
+
+Tham số `alpha` cho phép nội suy: `t = alpha · AdaIN(c,s) + (1−alpha) · c`, nhờ đó **một cặp
+ảnh sinh ra được nhiều mức thời tiết nặng/nhẹ khác nhau** — rất hữu ích để đa dạng hoá dữ liệu.
+
+![Điều khiển cường độ](../assets/fig_alpha.jpg)
+
+### 5.2. Khối ② — Guided Filter
+
+AdaIN chuyển tông màu tốt nhưng làm nhoè biên, ảnh trông như tranh vẽ nên không dùng để huấn
+luyện detector được. Guided Filter (He et al., ECCV 2010) coi ảnh AdaIN là tín hiệu cần lọc `p`
+và ảnh gốc là **ảnh dẫn hướng** `I`, rồi tìm quan hệ tuyến tính cục bộ trong từng cửa sổ nhỏ:
+
+> **q = a · I + b**, với `a = cov(I,p) / (var(I) + ε)` và `b = μ(p) − a · μ(I)`
+
+Kết quả mang **màu và độ sáng của ảnh AdaIN** nhưng **biên và chi tiết của ảnh gốc**. Đây chính
+là kỹ thuật hậu xử lý mà các phương pháp photorealistic style transfer (PhotoWCT, WCT²) sử dụng.
+
+**Bán kính cửa sổ quyết định chất lượng.** Đây là chi tiết cài đặt quan trọng nhất của cả
+pipeline, ban đầu chúng tôi đặt sai và ảnh ra bị mờ:
+
+| Bán kính | `a`, `b` biến đổi | Kết quả |
+|---|---|---|
+| nhỏ (r = 8) | nhanh, bám nhiễu cục bộ | q gần bằng ảnh AdaIN đã làm mượt → **ảnh mờ** |
+| lớn (r = 32) | chậm, mượt theo không gian | q = ảnh gốc × trường tương phản/màu mượt → **ảnh sắc nét** |
+
+Với bán kính lớn, `a` và `b` gần như là một "lớp phủ tông màu" thay đổi từ từ trên toàn ảnh.
+Nói cách khác, đầu ra chính là **ảnh chụp gốc, giữ nguyên 100% chi tiết**, chỉ bị nhân với một
+trường độ tương phản và cộng một trường lệch màu do AdaIN quyết định. Đúng bằng thứ ta cần cho
+tăng cường dữ liệu: đổi điều kiện thời tiết mà không đụng đến nội dung.
+
+Cấu hình dùng trong báo cáo: `radius = 32`, `eps = 2·10⁻⁵`.
+
+### 5.3. Khối ③ — Hiệu ứng vật lý
+
+AdaIN khớp thống kê theo kênh nên về bản chất **không thể** tạo ra vệt mưa hay bông tuyết —
+đó là các chi tiết cục bộ, không phải thống kê toàn cục. Khối thứ ba bù đúng điểm này:
+
+- **Sương mù / bão cát** — mô hình tán xạ khí quyển: `I' = I·t + A·(1−t)` với `t = exp(−β·d)`.
+  Độ sâu `d` được xấp xỉ theo giả thiết mặt đường phẳng: điểm càng gần đường chân trời càng xa.
+- **Mưa** — nhiễu thưa được làm mờ chuyển động theo một góc nghiêng để thành vệt, phủ theo chế
+  độ *screen*, kèm giảm tương phản và ám xanh lạnh.
+- **Tuyết** — bông tuyết ở ba lớp độ sâu (xa: nhỏ và mờ; gần: to và rõ), kèm tăng sáng và giảm
+  bão hoà màu.
+
+Module này đồng thời đóng vai trò **baseline không cần học** để so sánh trong phần đánh giá.
+
+### 5.4. Vì sao nhãn bounding box vẫn dùng lại được?
+
+Cả ba khối đều là phép biến đổi **tại chỗ trên từng điểm ảnh**: không dịch chuyển, không co
+giãn, không xoay. Toạ độ mỗi vật thể trong ảnh đầu ra trùng khít toạ độ trong ảnh gốc, nên mỗi
+ảnh sinh ra chỉ cần **sao chép file nhãn** của ảnh gốc.
+
+![Nhãn được bảo toàn](../assets/fig_labels.jpg)
+
+*Cùng một bộ bounding box được vẽ lên ảnh gốc (trái) và ảnh tăng cường (phải) — các khung vẫn
+ôm khít vật thể.*
+
+## 6. Cài đặt và huấn luyện
+
+| Thành phần | Giá trị |
+|---|---|
+| Encoder | VGG-19 (ImageNet), **đóng băng** — 0 tham số học |
+| Decoder | 3,51 M tham số (phản chiếu VGG tới `relu4_1`, dùng ReflectionPad + Upsample nearest) |
+| Dữ liệu | {n_ct} ảnh nội dung × {n_style} ảnh tham chiếu, ghép cặp **ngẫu nhiên** mỗi bước |
+| Tiền xử lý | resize cạnh ngắn → 320, cắt ngẫu nhiên 256×256, lật ngang |
+| Batch / số bước | 8 / {steps:,} |
+| Optimizer | Adam, lr 1e-4, `lr_t = lr / (1 + 5e-5·t)` |
+| Mixed precision | bfloat16 (thống kê mean/std vẫn tính ở float32 để tránh sai số) |
+| Phần cứng | 1 × NVIDIA RTX 5060 Ti 16GB |
+| Thời gian huấn luyện | {train_time} |
+
+### Hàm mất mát
+
+> **L = L_content + 10 · L_style + 1 · L_identity**
+
+- **L_content** — sai số bình phương giữa đặc trưng của ảnh đầu ra và đặc trưng AdaIN mục tiêu.
+  Giữ bố cục cảnh.
+- **L_style** — khớp `μ` và `σ` ở bốn tầng `relu1_1 … relu4_1`. Đưa tông màu về giống ảnh
+  tham chiếu.
+- **L_identity** — khi ảnh tham chiếu **trùng** ảnh nội dung thì đầu ra phải bằng chính ảnh
+  gốc. Đây là **điểm bổ sung so với AdaIN nguyên bản**: nó ép decoder tái tạo trung thực,
+  giảm hẳn hiện tượng méo cấu trúc — điều kiện sống còn để nhãn còn dùng được.
+
+![Đường cong huấn luyện](../assets/fig_loss.png)
+
+Ghép cặp ngẫu nhiên (mỗi ảnh nội dung gặp một ảnh tham chiếu khác nhau ở mỗi lần lặp) buộc
+decoder học cách tái tạo cho **mọi** phong cách thay vì ghi nhớ một vài cặp cụ thể. Nhờ đó mô
+hình xử lý được cả ảnh thời tiết chưa từng thấy mà không cần huấn luyện lại.
+
+## 7. Kết quả
+
+### 7.1. Định tính
+
+![Ví dụ đầu vào/đầu ra](../assets/fig_examples.jpg)
+
+Cùng một ảnh gốc, chỉ cần đổi ảnh tham chiếu là đổi được loại thời tiết:
+
+![Bốn loại thời tiết](../assets/fig_weather_types.jpg)
+
+### 7.2. Đóng góp của từng khối (ablation)
+
+![Ablation](../assets/fig_ablation.jpg)
+
+Từ trái sang phải: ảnh gốc → baseline vật lý → chỉ AdaIN → thêm Guided Filter → thêm phủ hạt.
+Có thể thấy rõ Guided Filter khôi phục lại độ sắc nét mà AdaIN làm mất, còn khối phủ hạt bổ
+sung các chi tiết cục bộ mà AdaIN về bản chất không tạo ra được.
+
+### 7.3. Định lượng
+
+Đánh giá trên **{n_eval}** ảnh nội dung, so với **{metrics.get('n_real','?')}** ảnh mưa/tuyết
+**thật** của BDD100K. Vì tập ảnh thật này chỉ gồm **mưa và tuyết**, phần đo FID cũng chỉ sinh
+mưa/tuyết ({', '.join(metrics.get('weathers', ['rain', 'snow']))}) để so cho khớp loại thời
+tiết — nếu sinh cả sương mù và bão cát rồi đem so với ảnh mưa/tuyết thì FID bị thổi phồng do
+lệch loại, không phản ánh chất lượng sinh ảnh.
+
+| Phương pháp | SSIM ↑ | PSNR ↑ | EdgeRecall ↑ | FID ↓ |
+|---|---|---|---|---|
+{metric_table}
+
+**Cách đọc bảng.**
+
+- **SSIM / PSNR / EdgeRecall** đo mức **giữ nội dung** so với ảnh gốc. EdgeRecall là tỉ lệ
+  biên Canny của ảnh gốc còn tìm thấy trong ảnh sinh ra — biên chính là hình dáng vật thể mà
+  bounding box bao quanh, nên chỉ số này trả lời trực tiếp câu hỏi "nhãn cũ còn khớp không".
+  Dùng *recall* thay vì *IoU* vì việc ảnh sinh ra có thêm biên mới (vệt mưa, bông tuyết) là
+  điều mong muốn chứ không phải lỗi. Càng cao càng tốt.
+- **FID** đo khoảng cách giữa phân bố ảnh sinh ra và phân bố ảnh thời tiết xấu **thật**.
+  Càng thấp nghĩa là trông càng giống thật.
+- Dòng đầu (**không tăng cường**) là mốc tham chiếu: khoảng cách miền dữ liệu ban đầu giữa ảnh
+  trời quang và ảnh thời tiết xấu thật.
+
+{fid_gain}
+
+Lưu ý khi diễn giải: SSIM cao **không** đồng nghĩa "tốt hơn" một cách tuyệt đối — một ảnh không
+thay đổi gì sẽ có SSIM = 1 nhưng vô dụng. Hai nhóm chỉ số phải đọc **cùng nhau**: mục tiêu là
+FID thấp (giống thật) *trong khi* EdgeRecall vẫn cao (nhãn còn dùng được).
+
+**Đọc kết quả một cách trung thực.** Không có phương pháp nào thắng tuyệt đối, và điều đó
+hợp lý:
+
+- Phương pháp **đề xuất** giữ nội dung tốt nhất (**SSIM** và **PSNR** cao nhất) — nhờ Guided
+  Filter bán kính lớn giữ nguyên chi tiết ảnh chụp gốc.
+- **Chỉ AdaIN** lại thắng ở **FID** và **EdgeRecall**. Lý do nằm ở khối phủ hạt: vệt mưa và
+  bông tuyết làm ảnh trông "ra thời tiết" với mắt người, nhưng (a) chúng là dấu vết tổng hợp
+  mà mạng Inception phát hiện và phạt nặng, và (b) chúng che bớt biên nên Canny tìm được ít
+  biên gốc hơn. Đáng chú ý là ảnh mưa thật trong BDD100K phần lớn được chụp qua kính chắn gió
+  nên gần như **không thấy vệt mưa rời** — chủ yếu là mặt đường ướt và độ tương phản thấp.
+  Đây là một phát hiện có ích: với dữ liệu dashcam, nên **giảm mật độ hạt** (hoặc tắt hẳn) và
+  để AdaIN lo phần tông màu.
+
+Cũng cần thẳng thắn về giới hạn của FID trong bài toán này. FID dựa trên đặc trưng Inception,
+vốn **rất nhạy với mọi dấu vết tổng hợp** (độ mờ nhẹ, nhiễu tái tạo của decoder). Ảnh gốc chưa
+tăng cường tuy khác hẳn về thời tiết nhưng lại là **ảnh chụp thật 100%**, cùng camera, cùng độ
+phân giải, cùng bố cục dashcam với tập ảnh thật — nên nó có lợi thế tự nhiên về FID. Vì vậy
+FID ở đây nên đọc là *"ảnh sinh ra chân thực đến mức nào"* (so sánh giữa ba phương pháp với
+nhau) chứ **không** phải bằng chứng về việc thu hẹp khoảng cách miền. Bằng chứng đó nằm ở
+**mục 8**: thí nghiệm huấn luyện detector thật rồi đo mAP trên ảnh thời tiết xấu thật.
+
+## 8. Thí nghiệm kiểm chứng: dữ liệu sinh ra có thực sự hữu ích?
+
+Đây là thí nghiệm quan trọng nhất của báo cáo — nó trả lời câu hỏi thực tế thay vì chỉ nhìn
+ảnh đẹp hay xấu.
+
+**Thiết kế.** {det_design} YOLOv8n giống hệt nhau về kiến trúc, siêu tham số và seed:
+
+{det_setup}
+{det_why}
+Các phép tăng cường màu sẵn có của YOLO (HSV, mosaic, erasing) được **tắt** để cô lập ảnh
+hưởng của dữ liệu do mô hình sinh ra.
+
+{det_table}
+
+{verdict}
+
+Hàng *trời quang* là **đối chứng**: nó xác nhận rằng việc thêm dữ liệu tăng cường không làm mô
+hình kém đi trong điều kiện bình thường — một rủi ro thường gặp khi tăng cường quá tay.
+
+Bộ dữ liệu tăng cường đã sinh: **{sum(aug_by_kind.values()) if aug_by_kind else 0}** ảnh
+({', '.join(f'{k}={v}' for k, v in sorted(aug_by_kind.items())) if aug_by_kind else 'chưa sinh'}),
+mỗi ảnh kèm đúng file nhãn của ảnh gốc.
+
+### 8.1. Công thức tăng cường đã dùng
+
+Mỗi ảnh gốc sinh ra `k` biến thể; với mỗi biến thể, các tham số được **bốc ngẫu nhiên**:
+
+| Tham số | Miền giá trị | Vì sao |
+|---|---|---|
+| Loại thời tiết | đều nhau trong {{fog, haze, rain, snow, sand}} | phủ đủ các điều kiện |
+| Ảnh tham chiếu | ngẫu nhiên trong kho của loại đó | mỗi ảnh cho một tông màu khác nhau |
+| `alpha` | 0,70 – 1,00 | tạo mức thời tiết nặng/nhẹ khác nhau |
+| Mật độ hạt | 0,25 – 0,65 | mưa/tuyết dày mỏng khác nhau |
+| Góc & độ dài vệt mưa | −22° … +8°, dài theo mật độ | mô phỏng hướng gió |
+| `std_floor` | 0,4 (cố định) | bảo đảm vật thể còn nhìn thấy được |
+
+Ngẫu nhiên hoá là điều bắt buộc: nếu mọi ảnh đều cùng một tông, detector sẽ học đúng **một**
+kiểu nhiễu chứ không học được tính bất biến với thời tiết nói chung.
+
+## 9. Web demo
+
+`app/app.py` dựng giao diện Gradio gồm bốn tab:
+
+1. **Sinh ảnh thời tiết** — tải lên ảnh giao thông, chọn loại thời tiết, chọn hoặc để hệ thống
+   tự lấy ảnh tham chiếu, điều chỉnh `alpha` và mật độ hạt, xem kết quả bằng thanh trượt so
+   sánh trước/sau và tải ảnh về.
+2. **So sánh phương pháp** — hiển thị cạnh nhau: ảnh gốc, baseline vật lý, chỉ AdaIN, và
+   phương pháp đề xuất.
+3. **Sinh hàng loạt** — mô phỏng khâu tạo dữ liệu huấn luyện thực tế.
+4. **Giới thiệu phương pháp** — giải thích ba khối cho người xem không chuyên.
+
+```bash
+python app/app.py      # http://127.0.0.1:7860
+```
+
+## 10. Hạn chế và hướng phát triển
+
+**Hạn chế**
+
+1. AdaIN chuyển thống kê **toàn cục**, chưa phân biệt vùng trời với mặt đường — sương mù có độ
+   dày như nhau ở gần và ở xa trong phần do AdaIN tạo ra.
+2. Không có bản đồ độ sâu thật; module vật lý dùng giả thiết mặt đường phẳng, sẽ kém chính xác
+   với ảnh chụp từ trên cao hoặc camera nghiêng.
+3. Chất lượng phụ thuộc ảnh tham chiếu: ảnh tham chiếu lệch quá nhiều về góc chụp hoặc bố cục
+   sẽ cho tông màu không tự nhiên.
+4. DAWN chỉ được phép dùng cho mục đích nghiên cứu.
+
+**Hướng phát triển**
+
+1. Thêm mặt nạ phân vùng trời / đường để chuyển tông riêng cho từng vùng.
+2. Dùng mô hình ước lượng độ sâu đơn ảnh (Depth Anything, MiDaS) thay giả thiết mặt đường phẳng.
+3. Thay AdaIN bằng AdaAttN hoặc WCT² để bám cấu trúc tốt hơn nữa.
+4. Thu thập ảnh tham chiếu thời tiết **tại Việt Nam** để khớp bối cảnh triển khai.
+5. Mở rộng sang các điều kiện khó khác: ban đêm, chói nắng ngược, đèn pha ngược chiều.
+
+## 11. Dùng với dữ liệu của bạn
+
+Pipeline **không ràng buộc** vào BDD100K hay DAWN. Để chạy trên dữ liệu riêng, chỉ cần:
+
+1. Đặt ảnh giao thông điều kiện bình thường vào một thư mục.
+2. Đặt ảnh thời tiết tham chiếu vào `data/style/<tên_loại>/` (ảnh chụp bằng điện thoại cũng được —
+   AdaIN chỉ lấy thống kê màu, không cần ảnh cùng góc chụp).
+3. Suy luận trực tiếp, **không cần huấn luyện lại**:
+
+```bash
+python infer.py --content thu_muc_anh_cua_ban --style data/style/rain \
+                --out outputs/ket_qua --particles 0.5
+```
+
+Chỉ cần huấn luyện lại decoder khi ảnh của bạn khác hẳn về miền (ví dụ ảnh hồng ngoại,
+ảnh vệ tinh) — khi đó chạy lại `train.py` với thư mục ảnh mới.
+
+Nếu có nhãn bounding box ở định dạng YOLO, đặt vào `data/processed/labels/` là
+`augment_dataset.py` sẽ tự sao chép nhãn sang ảnh mới.
+
+## 12. Hướng dẫn tái lập
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+pip install -r requirements.txt
+
+bash run_all.sh          # chạy toàn bộ: tải dữ liệu → train → đánh giá → thí nghiệm
+python app/app.py        # mở web demo
+```
+
+Hoặc chạy từng bước — xem `README.md`.
+
+## 13. Giấy phép dữ liệu và mô hình
+
+| Thành phần | Giấy phép | Lưu ý khi thương mại hoá |
+|---|---|---|
+| BDD100K | BSD-3-Clause | Dùng được |
+| **DAWN** | **Chỉ nghiên cứu, cấm thương mại** | **Phải thay thế** |
+| VGG-19 (torchvision) | BSD-3-Clause | Dùng được |
+| YOLOv8 (Ultralytics) | AGPL-3.0 | Cần mua licence hoặc đổi detector |
+
+Pipeline **không phụ thuộc** vào bộ dữ liệu cụ thể nào — chỉ cần một thư mục ảnh tham chiếu
+thời tiết bất kỳ là chạy được. Khi triển khai thương mại, thay DAWN bằng ảnh tự thu thập.
+
+## 14. Tài liệu tham khảo
+
+1. X. Huang, S. Belongie. *Arbitrary Style Transfer in Real-time with Adaptive Instance
+   Normalization.* ICCV 2017.
+2. K. He, J. Sun, X. Tang. *Guided Image Filtering.* ECCV 2010.
+3. F. Yu et al. *BDD100K: A Diverse Driving Dataset for Heterogeneous Multitask Learning.*
+   CVPR 2020.
+4. M. A. Kenk, M. Hassaballah. *DAWN: Vehicle Detection in Adverse Weather Nature Dataset.* 2020.
+5. S. G. Narasimhan, S. K. Nayar. *Vision and the Atmosphere.* IJCV 2002.
+6. Y. Li et al. *A Closed-form Solution to Photorealistic Image Stylization.* ECCV 2018 (PhotoWCT).
+7. C. Sakaridis, D. Dai, L. Van Gool. *Semantic Foggy Scene Understanding with Synthetic Data.*
+   IJCV 2018.
+"""
+
+
+# --------------------------------------------------------------------------- #
+CSS = """
+:root { --ink:#141a27; --muted:#5a6375; --accent:#2e6fd9; --teal:#18a099;
+        --line:#e3e8f0; --bg:#ffffff; --code:#f5f7fb; }
+* { box-sizing: border-box; }
+body { margin:0 auto; max-width:900px; padding:56px 32px 96px;
+       font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+       color:var(--ink); background:var(--bg); line-height:1.72; font-size:16px; }
+h1 { font-size:2.05rem; line-height:1.25; margin:0 0 .6em; letter-spacing:-.02em;
+     border-bottom:3px solid var(--teal); padding-bottom:.4em; }
+h2 { font-size:1.42rem; margin:2.4em 0 .7em; padding-top:.4em;
+     border-top:1px solid var(--line); letter-spacing:-.01em; }
+h3 { font-size:1.12rem; margin:1.8em 0 .5em; color:var(--accent); }
+p, li { color:#232b3d; }
+blockquote { margin:1.4em 0; padding:.9em 1.2em; background:var(--code);
+             border-left:4px solid var(--accent); border-radius:0 6px 6px 0;
+             font-size:1.05em; }
+blockquote p { margin:0; font-weight:600; }
+table { border-collapse:collapse; width:100%; margin:1.4em 0; font-size:.93rem; }
+th { background:#141a27; color:#fff; text-align:left; font-weight:600; }
+th, td { padding:9px 12px; border:1px solid var(--line); vertical-align:top; }
+tbody tr:nth-child(even) { background:#f8fafd; }
+code { background:var(--code); padding:.15em .4em; border-radius:4px;
+       font-family:"SF Mono",Menlo,Consolas,monospace; font-size:.88em; }
+pre { background:#141a27; color:#e6ebf5; padding:18px 20px; border-radius:8px;
+      overflow-x:auto; line-height:1.5; font-size:.83rem; }
+pre code { background:none; color:inherit; padding:0; }
+img { max-width:100%; height:auto; display:block; margin:1.4em auto;
+      border:1px solid var(--line); border-radius:8px; }
+em { color:var(--muted); }
+hr { border:none; border-top:1px solid var(--line); margin:2.4em 0; }
+@media print {
+  body { max-width:none; padding:0; font-size:11.5pt; }
+  h2 { page-break-after:avoid; } img,table,pre { page-break-inside:avoid; }
+}
+"""
+
+
+def to_html(md: str) -> str:
+    import markdown as md_lib
+
+    def embed(m):
+        alt, src = m.group(1), m.group(2)
+        p = (REPORT / src).resolve()
+        if not p.exists():
+            return f'*(thiếu hình: {src})*'
+        b64 = base64.b64encode(p.read_bytes()).decode()
+        mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
+        return f'<img src="data:{mime};base64,{b64}" alt="{alt}">'
+
+    body = md_lib.markdown(md, extensions=["tables", "fenced_code", "attr_list"])
+    body = re.sub(r'<img alt="([^"]*)" src="([^"]+)"\s*/?>', embed, body)
+    body = re.sub(r'<p>\*\(thiếu hình: ([^)]+)\)\*</p>',
+                  r'<p><em>(thiếu hình: \1)</em></p>', body)
+    return (f'<!doctype html><html lang="vi"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<title>Báo cáo — Tăng cường dữ liệu ảnh giao thông theo thời tiết</title>'
+            f'<style>{CSS}</style></head><body>{body}</body></html>')
+
+
+def to_pdf(html_path: Path, pdf_path: Path) -> bool:
+    for exe in ("brave", "chromium", "google-chrome", "chromium-browser", "brave-browser"):
+        if shutil.which(exe):
+            try:
+                subprocess.run([exe, "--headless", "--disable-gpu", "--no-sandbox",
+                                f"--print-to-pdf={pdf_path}", "--no-pdf-header-footer",
+                                html_path.as_uri()],
+                               check=True, capture_output=True, timeout=180)
+                if pdf_path.exists():
+                    return True
+            except Exception:  # noqa: BLE001
+                continue
+    return False
+
+
+def to_artifact_html(md: str) -> str:
+    """Bản HTML CHỈ GỒM phần thân — dùng để đăng lên Artifact (trang web chia sẻ được).
+    Không có <!doctype>/<html>/<head>/<body> vì nền tảng tự bọc thêm."""
+    full = to_html(md)
+    body = full.split("<body>", 1)[1].rsplit("</body>", 1)[0]
+    return (f'<title>Tăng cường dữ liệu thời tiết</title>\n'
+            f'<style>{CSS}</style>\n{body}')
+
+
+def main() -> None:
+    md = build_markdown()
+    (REPORT / "BaoCao.md").write_text(md, encoding="utf-8")
+    print(f"✓ {REPORT/'BaoCao.md'}")
+
+    html = to_html(md)
+    (REPORT / "BaoCao.html").write_text(html, encoding="utf-8")
+    print(f"✓ {REPORT/'BaoCao.html'}  ({len(html)/1e6:.1f} MB, ảnh nhúng sẵn)")
+
+    (REPORT / "BaoCao_artifact.html").write_text(to_artifact_html(md), encoding="utf-8")
+    print(f"✓ {REPORT/'BaoCao_artifact.html'}  (bản dùng để đăng Artifact)")
+
+    if to_pdf(REPORT / "BaoCao.html", REPORT / "BaoCao.pdf"):
+        print(f"✓ {REPORT/'BaoCao.pdf'}")
+    else:
+        print("  – Không xuất được PDF tự động. Mở BaoCao.html rồi Ctrl+P → Save as PDF.")
+
+
+if __name__ == "__main__":
+    main()

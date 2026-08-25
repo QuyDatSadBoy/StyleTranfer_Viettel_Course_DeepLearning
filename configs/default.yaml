@@ -1,0 +1,26 @@
+# Cấu hình mặc định cho huấn luyện WeatherStyleNet (AdaIN)
+data:
+  splits: data/processed/splits.json
+  load_size: 320          # resize cạnh ngắn về 320 px
+  crop_size: 256          # rồi cắt ngẫu nhiên 256x256 để huấn luyện
+  num_workers: 8
+
+model:
+  use_identity_loss: true
+
+train:
+  iters: 12000            # số bước huấn luyện (loss đã đi ngang từ ~10k)
+  batch_size: 8
+  lr: 1.0e-4
+  lr_decay: 5.0e-5        # lr_t = lr / (1 + lr_decay * t)   (theo bài báo AdaIN)
+  w_style: 10.0           # trọng số loss phong cách
+  w_identity: 1.0         # trọng số loss đồng nhất (giữ cấu trúc)
+  amp: true               # mixed precision bf16 cho nhanh
+  log_every: 100
+  preview_every: 1000
+  ckpt_every: 2000
+  seed: 42
+
+paths:
+  ckpt_dir: checkpoints
+  preview_dir: outputs/train_preview

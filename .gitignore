@@ -1,0 +1,29 @@
+# ---- môi trường ----
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# ---- dữ liệu (tải lại bằng scripts/01_download_data.py) ----
+data/raw/
+data/processed/
+data/style/
+data/augmented/
+
+# ---- kết quả trung gian ----
+outputs/
+experiments/detector/
+
+# ---- checkpoint kèm trạng thái optimizer (41MB, không cần bàn giao) ----
+checkpoints/last.pth
+
+# ---- trọng số YOLO do ultralytics tự tải về ----
+yolov8n.pt
+yolo*.pt
+weights/
+
+# GIỮ LẠI làm sản phẩm bàn giao:
+#   checkpoints/weather_adain.pth  (14MB, mô hình đã huấn luyện)
+#   assets/                        (hình minh hoạ)
+#   report/BaoCao.{md,html,pdf}    (báo cáo)
+#   slides/*.pptx                  (slide)

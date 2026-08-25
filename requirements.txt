@@ -1,0 +1,31 @@
+# PyTorch: cài riêng theo GPU của bạn, ví dụ cho GPU NVIDIA đời Blackwell (RTX 50xx):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+torch>=2.5
+torchvision>=0.20
+
+# Xử lý ảnh & dữ liệu
+numpy>=1.26
+opencv-python-headless>=4.9
+pillow>=10.0
+scikit-image>=0.22
+pandas>=2.0
+matplotlib>=3.8
+
+# Tiện ích
+pyyaml>=6.0
+tqdm>=4.66
+requests>=2.31
+
+# Web demo
+gradio>=5.0
+
+# Đánh giá
+torchmetrics>=1.4
+torch-fidelity>=0.3
+lpips>=0.1.4
+
+# Thí nghiệm detector
+ultralytics>=8.3
+
+# Xuất slide
+python-pptx>=1.0

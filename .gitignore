@@ -27,3 +27,6 @@ weights/
 #   assets/                        (hình minh hoạ)
 #   report/BaoCao.{md,html,pdf}    (báo cáo)
 #   slides/*.pptx                  (slide)
+
+# ---- thư mục nộp bài (chỉ là bản sao của report/, slides/ và notebook) ----
+NopBai_Nhom6/

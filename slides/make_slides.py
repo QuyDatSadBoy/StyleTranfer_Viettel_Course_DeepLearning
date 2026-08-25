@@ -163,10 +163,15 @@ def build() -> None:
         ("TĂNG CƯỜNG DỮ LIỆU ẢNH GIAO THÔNG", 33, True, WHITE),
         ("BẰNG CHUYỂN PHONG CÁCH THỜI TIẾT", 33, True, TEAL),
     ])
-    text(s, Inches(0.9), Inches(4.75), Inches(11.7), Inches(1.6), [
-        ("Đầu vào: 1 ảnh giao thông trời quang  +  1 ảnh tham chiếu thời tiết", 17, False, RGBColor(0xC8, 0xD2, 0xE4)),
-        ("Đầu ra: ảnh giao thông dưới thời tiết xấu — giữ nguyên nhãn bounding box", 17, False, RGBColor(0xC8, 0xD2, 0xE4)),
-        ("AdaIN (ICCV 2017) + Guided Filter + mô hình tán xạ khí quyển", 15, False, TEAL),
+    text(s, Inches(0.9), Inches(4.62), Inches(11.7), Inches(1.0), [
+        ("Đầu vào: 1 ảnh giao thông trời quang  +  1 ảnh tham chiếu thời tiết", 16, False, RGBColor(0xC8, 0xD2, 0xE4)),
+        ("Đầu ra: ảnh giao thông dưới thời tiết xấu — giữ nguyên nhãn bounding box", 16, False, RGBColor(0xC8, 0xD2, 0xE4)),
+    ])
+    rect(s, Inches(0.9), Inches(5.95), Inches(0.06), Inches(1.0), TEAL)
+    text(s, Inches(1.15), Inches(5.92), Inches(11.4), Inches(1.1), [
+        ("NHÓM 6  ·  Bài tập cuối khoá — Deep Learning Ứng dụng", 15, True, TEAL),
+        ("Hoàng Minh Đức  ·  Trần Quý Đạt  ·  Hoàng Trung Kiên  ·  Vũ Thuỳ Linh",
+         14, False, RGBColor(0xC8, 0xD2, 0xE4)),
     ])
 
     # ---------- 2. Bài toán ---------- #
@@ -254,10 +259,10 @@ def build() -> None:
         ["Decoder", "3,51 M tham số"],
         ["Ảnh huấn luyện", "2.160 nội dung × 1.327 style"],
         ["Kích thước", "resize 320 → crop 256"],
-        ["Batch / bước", "8 / 20.000"],
+        ["Batch / bước", "8 / 12.000"],
         ["Optimizer", "Adam, lr 1e-4, decay 5e-5"],
         ["Mixed precision", "bfloat16"],
-        ["Thời gian", "≈ 1 giờ (RTX 5060 Ti)"],
+        ["Thời gian", "37 phút (RTX 5060 Ti)"],
     ], [2.1, 3.5], row_h=0.36)
     text(s, Inches(6.7), Inches(1.4), Inches(5.9), Inches(2.4), [
         ("Hàm mất mát", 19, True, NAVY),
@@ -352,27 +357,7 @@ def build() -> None:
          [("Hàng 'trời quang' là đối chứng: xác nhận việc thêm dữ liệu tăng cường "
            "không làm mô hình kém đi trên điều kiện bình thường.", 14, False, GREY)])
 
-    # ---------- 14. Sản phẩm ---------- #
-    n += 1
-    s = blank(prs)
-    header(s, "Sản phẩm bàn giao", "Mã nguồn chạy được từ đầu đến cuối bằng 1 lệnh", n)
-    items = [
-        ("scripts/01,02,03_*.py", "Tải dữ liệu · chia tập · sinh hình minh hoạ"),
-        ("train.py", "Huấn luyện (có resume, log, preview, checkpoint)"),
-        ("infer.py", "Suy luận 1 ảnh hoặc cả thư mục, xuất ảnh so sánh"),
-        ("augment_dataset.py", "Sinh bộ dữ liệu tăng cường kèm nhãn"),
-        ("evaluate.py", "SSIM / PSNR / EdgeRecall / FID"),
-        ("experiments/detector_experiment.py", "Thí nghiệm YOLOv8 baseline vs tăng cường"),
-        ("app/app.py", "Web demo Gradio 4 tab"),
-        ("run_all.sh", "Chạy toàn bộ quy trình"),
-    ]
-    for i, (f, d) in enumerate(items):
-        y = Emu(int(Inches(1.45) + Inches(0.66) * i))
-        rect(s, Inches(0.7), y, Inches(11.9), Inches(0.56), LIGHT if i % 2 == 0 else WHITE)
-        text(s, Inches(0.9), Emu(int(y + Inches(0.12))), Inches(4.3), Inches(0.5), [(f, 15, True, BLUE)])
-        text(s, Inches(5.4), Emu(int(y + Inches(0.12))), Inches(7.0), Inches(0.5), [(d, 15, False, NAVY)])
-
-    # ---------- 15. Hạn chế ---------- #
+    # ---------- 14. Hạn chế ---------- #
     n += 1
     s = blank(prs)
     header(s, "Hạn chế & hướng phát triển", "", n)
@@ -390,7 +375,7 @@ def build() -> None:
          "· Thu thập ảnh tham chiếu thời tiết tại Việt Nam để khớp bối cảnh triển khai thực tế.\n\n"
          "· Mở rộng sang ban đêm, chói nắng ngược, đèn pha.", TEAL)
 
-    # ---------- 16. Kết luận ---------- #
+    # ---------- 15. Kết luận ---------- #
     n += 1
     s = blank(prs)
     rect(s, 0, 0, W, H, NAVY)
@@ -400,12 +385,13 @@ def build() -> None:
         ("", 10, False, WHITE),
         ("· Xây dựng trọn vẹn pipeline sinh ảnh giao thông thời tiết xấu từ 2 ảnh đầu vào, "
          "đúng yêu cầu đề bài.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("· Toàn bộ dùng mã nguồn mở; decoder chỉ 3,51 M tham số, huấn luyện ~1 giờ trên 1 GPU.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
+        ("· Toàn bộ dùng mã nguồn mở; decoder chỉ 3,51 M tham số, huấn luyện 37 phút trên 1 GPU.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
         ("· Nhãn bounding box tái sử dụng 100% — chi phí gán nhãn cho dữ liệu mới bằng 0.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
         ("· Có kiểm chứng định lượng (SSIM/EdgeRecall/FID) và thí nghiệm downstream với YOLOv8.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("· Kèm web demo trực quan, chạy toàn bộ quy trình bằng một lệnh.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("", 12, False, WHITE),
-        ("Xin cảm ơn!", 24, True, TEAL),
+        ("· Bàn giao: mã nguồn chạy được bằng 1 lệnh, web demo Gradio, mô hình đã huấn luyện,", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
+        ("   báo cáo và slide — toàn bộ số liệu sinh tự động từ kết quả thật.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
+        ("", 10, False, WHITE),
+        ("Nhóm 6  —  Xin cảm ơn!", 24, True, TEAL),
     ])
 
     OUT.parent.mkdir(parents=True, exist_ok=True)

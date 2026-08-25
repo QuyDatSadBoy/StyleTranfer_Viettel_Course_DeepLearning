@@ -153,6 +153,18 @@ epoch, và phép so sánh chặt chẽ là **C − B**.
 
     return f"""# Tăng cường dữ liệu ảnh giao thông bằng chuyển phong cách thời tiết
 
+*Weather Style Transfer for Traffic Data Augmentation*
+
+**Bài tập cuối khoá — môn Deep Learning Ứng dụng**
+
+| | |
+|---|---|
+| **Nhóm** | 6 |
+| **Thành viên** | Hoàng Minh Đức · Trần Quý Đạt · Hoàng Trung Kiên · Vũ Thuỳ Linh |
+| **Mã nguồn** | https://github.com/QuyDatSadBoy/StyleTranfer_Viettel_Course_DeepLearning |
+
+---
+
 **Bài toán.** Cho một ảnh giao thông chụp trong **điều kiện bình thường** và một ảnh
 **tham chiếu thời tiết** (mưa, tuyết, sương mù, bão cát), sinh ra ảnh giao thông đó dưới
 điều kiện thời tiết mong muốn, nhằm **tăng cường dữ liệu huấn luyện** cho các mô hình thị

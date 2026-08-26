@@ -3,6 +3,7 @@ Bước 3 — Sinh toàn bộ hình minh hoạ dùng cho báo cáo và slide.
 
 Xuất ra thư mục assets/:
   fig_dataset.png          phân bố dữ liệu
+  fig_data_samples.jpg     ảnh mẫu hai loại đầu vào + ảnh có vẽ nhãn
   fig_loss.png             đường cong huấn luyện
   fig_weather_types.jpg    cùng 1 ảnh gốc -> 5 loại thời tiết
   fig_alpha.jpg            điều khiển cường độ bằng alpha
@@ -140,6 +141,73 @@ def fig_loss() -> None:
     print("  ✓ fig_loss.png")
 
 
+def fig_data_samples(splits, rng) -> None:
+    """Ảnh mẫu của HAI loại đầu vào, kèm một ảnh đã vẽ sẵn bounding box."""
+    classes = splits["classes"]
+    palette = [(230, 60, 60), (60, 160, 230), (70, 200, 120), (245, 170, 40),
+               (180, 100, 230), (240, 120, 180), (100, 220, 220), (200, 200, 90),
+               (150, 150, 250), (250, 150, 100)]
+
+    def read_boxes(rel, min_area=0.004):
+        lbl = ROOT / "data/processed/labels" / (Path(rel).stem + ".txt")
+        out = []
+        for line in lbl.read_text().split("\n"):
+            q = line.split()
+            if len(q) == 5:
+                cid, xc, yc, bw, bh = int(q[0]), *map(float, q[1:])
+                if bw * bh >= min_area:
+                    out.append((cid, xc, yc, bw, bh))
+        return out
+
+    # chọn ảnh có nhiều vật thể ĐỦ TO để hình minh hoạ dễ nhìn
+    best = max(splits["content_val"][:120], key=lambda r: min(len(read_boxes(r)), 9))
+    img = load(best)
+    im = Image.fromarray(img.copy())
+    d = ImageDraw.Draw(im)
+    f = _font(15)
+    H, W = img.shape[:2]
+    for cid, xc, yc, bw, bh in read_boxes(best)[:10]:
+        x0, y0 = (xc - bw / 2) * W, (yc - bh / 2) * H
+        col = palette[cid % len(palette)]
+        d.rectangle([x0, y0, (xc + bw / 2) * W, (yc + bh / 2) * H], outline=col, width=3)
+        d.text((x0 + 3, max(0, y0 - 16)), classes[cid], fill=col, font=f)
+    boxed = np.asarray(im)
+
+    row1 = [boxed] + [load(p) for p in rng.sample(splits["content_val"], 4)]
+    row2 = [load(rng.choice(splits["style_pool"][k]), 512) for k in WEATHERS]
+
+    # ---- dựng canvas thủ công để mỗi hàng có nhãn riêng ---- #
+    CW, PAD, BAR = 320, 6, 30
+    ch = int(CW * row1[0].shape[0] / row1[0].shape[1])
+    W_c = 5 * CW + 6 * PAD
+    H_c = 2 * (BAR + ch + PAD) + 2 * BAR + PAD
+    canvas = Image.new("RGB", (W_c, H_c), (250, 250, 252))
+    dr = ImageDraw.Draw(canvas)
+    fb, fs = _font(19), _font(15)
+
+    y = PAD
+    for band_title, row, col_titles in (
+        ("ĐẦU VÀO 1 — Ảnh nội dung: BDD100K, trời quang, ban ngày (2.400 ảnh)",
+         row1, ["← có vẽ nhãn bounding box", "", "", "", ""]),
+        ("ĐẦU VÀO 2 — Ảnh tham chiếu thời tiết: DAWN + BDD100K (1.327 ảnh)",
+         row2, [WEATHER_VI[k] for k in WEATHERS]),
+    ):
+        dr.text((PAD + 2, y + BAR // 2), band_title, fill=(25, 30, 45), font=fb, anchor="lm")
+        y += BAR
+        for j, (im_j, ct) in enumerate(zip(row, col_titles)):
+            x = PAD + j * (CW + PAD)
+            if ct:
+                dr.text((x + CW // 2, y + BAR // 2 - 2), ct, fill=(90, 99, 117), font=fs, anchor="mm")
+        y += BAR
+        for j, im_j in enumerate(row):
+            x = PAD + j * (CW + PAD)
+            canvas.paste(Image.fromarray(im_j).resize((CW, ch), Image.LANCZOS), (x, y))
+        y += ch + PAD
+
+    canvas.save(ASSETS / "fig_data_samples.jpg", quality=93)
+    print("  ✓ fig_data_samples.jpg")
+
+
 def fig_weather_types(aug, splits, rng) -> None:
     contents = rng.sample(splits["content_val"], 3)
     rows, row_titles = [], []
@@ -268,6 +336,7 @@ def main() -> None:
     print("Đang sinh hình minh hoạ -> assets/")
     fig_dataset(splits)
     fig_loss()
+    fig_data_samples(splits, random.Random(3))
     try:
         aug = WeatherAugmenter("checkpoints/weather_adain.pth")
     except FileNotFoundError as e:

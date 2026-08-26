@@ -209,6 +209,29 @@ def build() -> None:
         ["DAWN (Mendeley)", "Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát", "1.027 ảnh", "Chỉ nghiên cứu"],
     ], [3.0, 5.0, 1.7, 1.9], size=12)
 
+    # ---------- 3b. Dữ liệu — ảnh mẫu ---------- #
+    n += 1
+    s = blank(prs)
+    header(s, "Dữ liệu — ảnh mẫu & định dạng nhãn",
+           "Hai loại ảnh đầu vào, và nhãn đi kèm mỗi ảnh nội dung", n)
+    fit_picture(s, "fig_data_samples.jpg", Inches(0.5), Inches(1.28), Inches(12.3), Inches(3.5))
+
+    card(s, Inches(0.7), Inches(4.95), Inches(5.9), Inches(1.95),
+         "MỖI ẢNH NỘI DUNG CÓ 3 LOẠI NHÃN",
+         "· weather   — clear / overcast / rainy / snowy / foggy …\n"
+         "· timeofday — daytime / night / dawn-dusk\n"
+         "· bounding box — 10 lớp (car, pedestrian, traffic sign …)\n"
+         "   62.468 box trên 3.200 ảnh, trung bình ~20 box/ảnh", BLUE)
+
+    rect(s, Inches(7.0), Inches(4.95), Inches(5.6), Inches(1.95), NAVY)
+    text(s, Inches(7.25), Inches(5.1), Inches(5.2), Inches(1.8), [
+        ("ĐỊNH DẠNG NHÃN (YOLO)", 15, True, TEAL),
+        ("b1c66a42-6f7d68ca.txt", 13, False, RGBColor(0x9F, 0xB0, 0xC8)),
+        ("2  0.482  0.531  0.061  0.088     → car", 13, False, WHITE),
+        ("9  0.781  0.391  0.031  0.062     → traffic sign", 13, False, WHITE),
+        ("lớp   x_tâm   y_tâm   rộng   cao   (đã chuẩn hoá 0–1)", 12, False, RGBColor(0x9F, 0xB0, 0xC8)),
+    ], spacing=1.1)
+
     # ---------- 4. Tổng quan phương pháp ---------- #
     n += 1
     s = blank(prs)
@@ -282,7 +305,6 @@ def build() -> None:
     for title, sub, fig in (
         ("Kết quả — 5 loại thời tiết", "Cùng một ảnh gốc, đổi ảnh tham chiếu là đổi thời tiết", "fig_weather_types.jpg"),
         ("Kết quả — ví dụ đầu vào/đầu ra", "Trái: 2 đầu vào · Phải: ảnh sinh ra", "fig_examples.jpg"),
-        ("Điều khiển cường độ bằng alpha", "Một cặp ảnh sinh ra nhiều mức nặng/nhẹ → tăng độ đa dạng dữ liệu", "fig_alpha.jpg"),
         ("Đóng góp của từng khối (ablation)", "Từ trái sang phải: thêm dần từng thành phần", "fig_ablation.jpg"),
     ):
         n += 1

@@ -236,6 +236,26 @@ lượng cho nhẹ:
 | **BDD100K** — mưa / tuyết, **ban ngày** | 300 ảnh tham chiếu + {n_test} ảnh tập test **thật** | {300 + n_test} ảnh | BSD-3-Clause |
 | **DAWN** (Mendeley, DOI 10.17632/766ygrbt8y.3) | Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát | 1.027 ảnh | **Chỉ nghiên cứu** |
 
+![Ảnh mẫu hai loại đầu vào](../assets/fig_data_samples.jpg)
+
+**Nhãn đi kèm mỗi ảnh nội dung.** BDD100K cung cấp sẵn ba loại nhãn:
+
+| Loại nhãn | Giá trị | Dùng để làm gì |
+|---|---|---|
+| `weather` | clear / overcast / partly cloudy / rainy / snowy / foggy / undefined | Lọc ảnh trời quang làm đầu vào; lọc ảnh mưa/tuyết làm tập test |
+| `timeofday` | daytime / night / dawn-dusk | Loại bỏ ảnh ban đêm |
+| `detections` | Bounding box **10 lớp** (car, pedestrian, traffic sign, traffic light, truck, bus, bicycle, motorcycle, rider, train) | Huấn luyện và đánh giá detector ở mục 8 |
+
+Tổng cộng **62.468 bounding box** trên 3.200 ảnh đã tải (trung bình ~20 box mỗi ảnh), được xuất
+sang định dạng YOLO — mỗi ảnh một file `.txt`, mỗi dòng là `<lớp> <x_tâm> <y_tâm> <rộng> <cao>`
+với toạ độ đã chuẩn hoá về khoảng 0–1:
+
+```
+b1c66a42-6f7d68ca.txt
+2  0.482  0.531  0.061  0.088     -> car
+9  0.781  0.391  0.031  0.062     -> traffic sign
+```
+
 **Kho ảnh tham chiếu đã dựng:** {', '.join(f'{k} = {v}' for k, v in sorted(style_n.items()))} — tổng **{n_style}** ảnh.
 
 BDD100K được chọn vì mỗi ảnh có sẵn ba loại nhãn cần thiết cùng lúc: nhãn **thời tiết**

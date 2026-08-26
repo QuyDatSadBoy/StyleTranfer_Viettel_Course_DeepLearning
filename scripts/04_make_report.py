@@ -226,11 +226,15 @@ và không tạo được hạt mưa cục bộ — được bù bằng hai kh�
 
 ![Phân bố dữ liệu](../assets/fig_dataset.png)
 
-| Bộ dữ liệu | Vai trò trong hệ thống | Số lượng dùng | Giấy phép |
+Biểu đồ trên mô tả **kho 10.000 ảnh có sẵn** trong metadata của BDD100K (tổng ba cột đầu đúng
+bằng 10.000). Từ kho đó nhóm **lọc ra** phần thực sự dùng — chỉ lấy ảnh ban ngày và giới hạn số
+lượng cho nhẹ:
+
+| Đã chọn ra từ kho | Vai trò trong hệ thống | Số lượng | Giấy phép |
 |---|---|---|---|
-| **BDD100K** (subset 10k, mirror HuggingFace `dgural/bdd100k`) | Ảnh nội dung — trời quang, ban ngày | {n_ct} train / {n_cv} val | BSD-3-Clause |
-| **BDD100K** — ảnh mưa/tuyết ban ngày | Ảnh tham chiếu + tập test **thật** | {n_test} ảnh test | BSD-3-Clause |
-| **DAWN** (Mendeley, DOI 10.17632/766ygrbt8y.3) | Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát | 1.000 ảnh | **Chỉ nghiên cứu** |
+| **BDD100K** — trời quang / nhiều mây, **ban ngày** | Ảnh nội dung (đầu vào) + nhãn bounding box | {n_ct} train + {n_cv} val = {n_ct + n_cv} ảnh | BSD-3-Clause |
+| **BDD100K** — mưa / tuyết, **ban ngày** | 300 ảnh tham chiếu + {n_test} ảnh tập test **thật** | {300 + n_test} ảnh | BSD-3-Clause |
+| **DAWN** (Mendeley, DOI 10.17632/766ygrbt8y.3) | Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát | 1.027 ảnh | **Chỉ nghiên cứu** |
 
 **Kho ảnh tham chiếu đã dựng:** {', '.join(f'{k} = {v}' for k, v in sorted(style_n.items()))} — tổng **{n_style}** ảnh.
 

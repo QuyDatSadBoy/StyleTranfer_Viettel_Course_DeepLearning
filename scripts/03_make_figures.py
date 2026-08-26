@@ -97,9 +97,9 @@ def fig_dataset(splits: dict) -> None:
 
     fig, ax = plt.subplots(1, 3, figsize=(14, 3.8))
     for a, data, title, color in (
-        (ax[0], w, "BDD100K — nhãn thời tiết (10.000 ảnh)", "#4C78A8"),
-        (ax[1], t, "BDD100K — thời điểm trong ngày", "#72B7B2"),
-        (ax[2], style_n, "Kho ảnh tham chiếu thời tiết đã dựng", "#E45756"),
+        (ax[0], w, "KHO CÓ SẴN: nhãn thời tiết của cả 10.000 ảnh", "#4C78A8"),
+        (ax[1], t, "KHO CÓ SẴN: thời điểm trong ngày", "#72B7B2"),
+        (ax[2], style_n, "ĐÃ CHỌN RA: kho ảnh tham chiếu (DAWN + BDD)", "#E45756"),
     ):
         items = sorted(data.items(), key=lambda kv: -kv[1])
         a.barh([k for k, _ in items][::-1], [v for _, v in items][::-1], color=color)

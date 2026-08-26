@@ -73,11 +73,15 @@ và không tạo được hạt mưa cục bộ — được bù bằng hai kh�
 
 ![Phân bố dữ liệu](../assets/fig_dataset.png)
 
-| Bộ dữ liệu | Vai trò trong hệ thống | Số lượng dùng | Giấy phép |
+Biểu đồ trên mô tả **kho 10.000 ảnh có sẵn** trong metadata của BDD100K (tổng ba cột đầu đúng
+bằng 10.000). Từ kho đó nhóm **lọc ra** phần thực sự dùng — chỉ lấy ảnh ban ngày và giới hạn số
+lượng cho nhẹ:
+
+| Đã chọn ra từ kho | Vai trò trong hệ thống | Số lượng | Giấy phép |
 |---|---|---|---|
-| **BDD100K** (subset 10k, mirror HuggingFace `dgural/bdd100k`) | Ảnh nội dung — trời quang, ban ngày | 2160 train / 240 val | BSD-3-Clause |
-| **BDD100K** — ảnh mưa/tuyết ban ngày | Ảnh tham chiếu + tập test **thật** | 500 ảnh test | BSD-3-Clause |
-| **DAWN** (Mendeley, DOI 10.17632/766ygrbt8y.3) | Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát | 1.000 ảnh | **Chỉ nghiên cứu** |
+| **BDD100K** — trời quang / nhiều mây, **ban ngày** | Ảnh nội dung (đầu vào) + nhãn bounding box | 2160 train + 240 val = 2400 ảnh | BSD-3-Clause |
+| **BDD100K** — mưa / tuyết, **ban ngày** | 300 ảnh tham chiếu + 500 ảnh tập test **thật** | 800 ảnh | BSD-3-Clause |
+| **DAWN** (Mendeley, DOI 10.17632/766ygrbt8y.3) | Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát | 1.027 ảnh | **Chỉ nghiên cứu** |
 
 **Kho ảnh tham chiếu đã dựng:** fog = 186, haze = 114, rain = 343, sand = 323, snow = 361 — tổng **1327** ảnh.
 

@@ -198,13 +198,16 @@ def build() -> None:
     n += 1
     s = blank(prs)
     header(s, "Dữ liệu", "Hai bộ dữ liệu công khai, tải tự động, không cần đăng ký", n)
-    fit_picture(s, "fig_dataset.png", Inches(0.6), Inches(1.35), Inches(12.1), Inches(3.2))
-    table(s, Inches(0.75), Inches(4.85), Inches(11.8), [
-        ["Bộ dữ liệu", "Vai trò", "Số lượng", "Giấy phép"],
-        ["BDD100K (subset 10k)", "Ảnh nội dung (trời quang, ban ngày) + nhãn box", "2.400 ảnh", "BSD-3"],
-        ["BDD100K (mưa / tuyết)", "Ảnh tham chiếu + tập test THẬT", "800 ảnh", "BSD-3"],
-        ["DAWN (Mendeley)", "Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát", "1.000 ảnh", "Chỉ nghiên cứu"],
-    ], [2.4, 5.2, 1.7, 1.9])
+    fit_picture(s, "fig_dataset.png", Inches(0.6), Inches(1.3), Inches(12.1), Inches(3.0))
+    text(s, Inches(0.75), Inches(4.35), Inches(11.8), Inches(0.4),
+         [("Biểu đồ = kho 10.000 ảnh có sẵn để chọn.   Bảng = số ảnh đã LỌC RA và thực sự dùng "
+           "(chỉ lấy ban ngày, giới hạn số lượng cho nhẹ).", 13, False, GREY)])
+    table(s, Inches(0.75), Inches(4.82), Inches(11.8), [
+        ["Đã chọn ra từ kho", "Vai trò", "Số lượng", "Giấy phép"],
+        ["BDD100K — trời quang, ban ngày", "Ảnh nội dung (đầu vào) + nhãn bounding box", "2.400 ảnh", "BSD-3"],
+        ["BDD100K — mưa/tuyết, ban ngày", "300 ảnh tham chiếu  +  500 ảnh tập test THẬT", "800 ảnh", "BSD-3"],
+        ["DAWN (Mendeley)", "Ảnh tham chiếu: sương mù / mù khô / mưa / tuyết / bão cát", "1.027 ảnh", "Chỉ nghiên cứu"],
+    ], [3.0, 5.0, 1.7, 1.9], size=12)
 
     # ---------- 4. Tổng quan phương pháp ---------- #
     n += 1

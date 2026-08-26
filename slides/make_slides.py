@@ -275,31 +275,84 @@ def build() -> None:
         "**Hệ quả: thời tiết mới chỉ cần đưa ảnh tham chiếu vào, KHÔNG huấn luyện lại.",
     ], size=16, gap=0.6)
 
-    # ---------- 6. Huấn luyện ---------- #
+    # ---------- 6. Tiền xử lý & huấn luyện ---------- #
     n += 1
     s = blank(prs)
-    header(s, "Huấn luyện", "Chỉ Decoder được học — VGG-19 đóng băng hoàn toàn", n)
-    table(s, Inches(0.7), Inches(1.4), Inches(5.6), [
-        ["Thành phần", "Giá trị"],
-        ["Encoder", "VGG-19 (ImageNet), đóng băng"],
-        ["Decoder", "3,51 M tham số"],
-        ["Ảnh huấn luyện", "2.160 nội dung × 1.327 style"],
-        ["Kích thước", "resize 320 → crop 256"],
-        ["Batch / bước", "8 / 12.000"],
-        ["Optimizer", "Adam, lr 1e-4, decay 5e-5"],
-        ["Mixed precision", "bfloat16"],
-        ["Thời gian", "37 phút (RTX 5060 Ti)"],
-    ], [2.1, 3.5], row_h=0.36)
-    text(s, Inches(6.7), Inches(1.4), Inches(5.9), Inches(2.4), [
-        ("Hàm mất mát", 19, True, NAVY),
-        ("L  =  L_content  +  10 · L_style  +  1 · L_identity", 15, True, BLUE),
-        ("· L_content — khớp đặc trưng đầu ra với đặc trưng AdaIN → giữ bố cục.", 14, False, GREY),
-        ("· L_style — khớp mean/std ở 4 tầng VGG → giống tông thời tiết.", 14, False, GREY),
-        ("· L_identity — khi style = content thì đầu ra phải bằng ảnh gốc.", 14, False, GREY),
-        ("   Đây là điểm bổ sung so với AdaIN gốc: ép decoder trung thực,", 14, False, GREY),
-        ("   giảm méo cấu trúc — điều kiện sống còn để nhãn còn dùng được.", 14, False, GREY),
-    ])
-    fit_picture(s, "fig_loss.png", Inches(0.7), Inches(4.85), Inches(11.9), Inches(2.2))
+    header(s, "Tiền xử lý dữ liệu & quy trình huấn luyện",
+           "Chỉ Decoder được học — VGG-19 đóng băng hoàn toàn", n)
+
+    rect(s, Inches(0.7), Inches(1.35), Inches(6.0), Inches(3.75), LIGHT)
+    rect(s, Inches(0.7), Inches(1.35), Inches(6.0), Inches(0.08), BLUE)
+    text(s, Inches(0.95), Inches(1.5), Inches(5.6), Inches(3.5), [
+        ("TIỀN XỬ LÝ", 17, True, NAVY),
+        ("① Lọc dữ liệu — chỉ giữ ảnh BAN NGÀY", 14, True, BLUE),
+        ("     clear / partly cloudy  →  ảnh nội dung", 12, False, GREY),
+        ("     rainy / snowy  →  ảnh tham chiếu + tập test", 12, False, GREY),
+        ("② Xử lý ảnh trước khi đưa vào mạng", 14, True, BLUE),
+        ("     Ảnh gốc 1280×720", 12, False, GREY),
+        ("        ↓  resize cạnh ngắn về 320 px", 12, False, GREY),
+        ("        ↓  cắt ngẫu nhiên 256×256  (tăng đa dạng)", 12, False, GREY),
+        ("        ↓  lật ngang + chuẩn hoá về [0, 1]", 12, False, GREY),
+        ("     →  Tensor 8×3×256×256", 12, True, NAVY),
+    ], spacing=0.98)
+
+    rect(s, Inches(7.0), Inches(1.35), Inches(5.6), Inches(3.75), LIGHT)
+    rect(s, Inches(7.0), Inches(1.35), Inches(5.6), Inches(0.08), TEAL)
+    text(s, Inches(7.25), Inches(1.5), Inches(5.2), Inches(3.5), [
+        ("MỘT BƯỚC HUẤN LUYỆN", 17, True, NAVY),
+        ("1.  Lấy 8 ảnh trời quang + 8 ảnh thời tiết ngẫu nhiên", 12, False, GREY),
+        ("2.  Đưa cả hai qua VGG-19  →  đặc trưng c và s", 12, False, GREY),
+        ("3.  t = AdaIN(c, s)          (trộn thống kê)", 12, False, GREY),
+        ("4.  out = Decoder(t)        (dựng lại thành ảnh)", 12, False, GREY),
+        ("5.  Đưa out qua VGG lần nữa  →  tính 3 loss", 12, False, GREY),
+        ("6.  Cập nhật Decoder bằng Adam", 12, False, GREY),
+        ("Ghép cặp NGẪU NHIÊN mỗi bước ⇒ decoder học tái", 12, True, NAVY),
+        ("tạo cho MỌI phong cách ⇒ thời tiết mới chỉ cần đưa", 12, True, NAVY),
+        ("ảnh tham chiếu vào, KHÔNG phải huấn luyện lại.", 12, True, NAVY),
+    ], spacing=0.98)
+
+    table(s, Inches(0.7), Inches(5.32), Inches(11.9), [
+        ["Thành phần", "Giá trị", "Thành phần", "Giá trị"],
+        ["Encoder", "VGG-19 pretrain, đóng băng — 0 tham số học", "Batch / số bước", "8 / 12.000"],
+        ["Decoder", "3,51 M tham số — DUY NHẤT được học", "Optimizer", "Adam, lr 1e-4, decay 5e-5"],
+        ["Dữ liệu", "2.160 ảnh nội dung × 1.327 ảnh tham chiếu", "Thời gian", "37 phút (RTX 5060 Ti)"],
+    ], [1.6, 4.6, 1.9, 3.0], size=12, row_h=0.42)
+
+    # ---------- 6b. Hàm mất mát ---------- #
+    n += 1
+    s = blank(prs)
+    header(s, "Hàm mất mát", "Ba thành phần, mỗi thành phần giữ một thứ khác nhau", n)
+    rect(s, Inches(0.7), Inches(1.3), Inches(11.9), Inches(0.95), NAVY)
+    text(s, Inches(0.7), Inches(1.5), Inches(11.9), Inches(0.7),
+         [("L  =  L_content  +  10 · L_style  +  1 · L_identity", 26, True, TEAL)],
+         align=PP_ALIGN.CENTER)
+
+    loss_cards = [
+        ("① L_content", "MSE( VGG(ảnh_ra) , t )",
+         "Ép ảnh ra có đặc trưng đúng bằng t = AdaIN(c,s). Decoder vẽ sai vị trí xe là loss tăng ngay.",
+         "→ GIỮ BỐ CỤC CẢNH", BLUE),
+        ("② L_style", "Σ MSE(μ, σ) qua 4 tầng VGG",
+         "Chỉ so trung bình và độ lệch chuẩn, KHÔNG so từng điểm ảnh — vì phong cách nằm ở thống kê.",
+         "→ GIỐNG TÔNG THỜI TIẾT", RGBColor(0xE4, 0x8A, 0x2E)),
+        ("③ L_identity", "MSE( Decoder(VGG(c)) , c )",
+         "Nếu style = content thì đầu ra PHẢI bằng đúng ảnh gốc. Điểm nhóm bổ sung so với bài báo gốc.",
+         "→ GIỮ CẤU TRÚC, nhãn còn dùng được", TEAL),
+    ]
+    for x, (title, formula, why, tag, col) in zip(
+            [Inches(0.7), Inches(4.85), Inches(9.0)], loss_cards):
+        rect(s, x, Inches(2.5), Inches(3.6), Inches(2.6), LIGHT)
+        rect(s, x, Inches(2.5), Inches(3.6), Inches(0.08), col)
+        text(s, Emu(int(x + Inches(0.22))), Inches(2.68), Inches(3.2), Inches(2.4), [
+            (title, 16, True, NAVY),
+            (formula, 13, True, col),
+            (why, 12, False, GREY),
+            (tag, 12, True, NAVY),
+        ], spacing=1.08)
+
+    text(s, Inches(0.7), Inches(5.3), Inches(11.9), Inches(0.4),
+         [("Đường cong huấn luyện thực tế — loss giảm mạnh 3.000 bước đầu rồi đi ngang; "
+           "từ bước 10.000 chỉ còn giảm ~1% mỗi 1.000 bước ⇒ dừng ở 12.000 bước.", 13, False, GREY)])
+    fit_picture(s, "fig_loss.png", Inches(0.7), Inches(5.72), Inches(11.9), Inches(1.5))
 
     # ---------- 7-10. Kết quả định tính ---------- #
     for title, sub, fig in (
@@ -336,14 +389,22 @@ def build() -> None:
                          fmt(v.get("edge_recall")), fmt(v.get("fid"), 2)])
     else:
         rows.append(["(chạy `python evaluate.py` để điền số liệu)", "", "", "", ""])
-    table(s, Inches(0.7), Inches(1.5), Inches(11.9), rows, [4.2, 1.9, 1.9, 2.0, 1.9], row_h=0.5)
-    bullets(s, Inches(0.7), Inches(4.25), Inches(11.6), [
-        "**SSIM / PSNR / EdgeRecall — mức giữ nội dung so với ảnh gốc (cao = nhãn còn dùng được).",
-        "**FID — khoảng cách tới ảnh mưa/tuyết THẬT của BDD100K (thấp = trông giống thật hơn).",
-        "Không phương pháp nào thắng tuyệt đối: bản đề xuất giữ nội dung tốt nhất (SSIM, PSNR),",
-        "AdaIN thuần thắng FID vì lớp phủ hạt là dấu vết tổng hợp bị Inception phạt.",
-        "**Kết luận: với ảnh dashcam nên giảm mật độ hạt — mưa thật qua kính chắn gió gần như không thấy vệt.",
-    ], size=14, gap=0.5)
+    table(s, Inches(0.7), Inches(1.35), Inches(11.9), rows, [4.2, 1.9, 1.9, 2.0, 1.9], row_h=0.46)
+    table(s, Inches(0.7), Inches(4.0), Inches(11.9), [
+        ["Chỉ số", "Cách tính", "Trả lời câu hỏi gì"],
+        ["SSIM ↑", "So cấu trúc cục bộ giữa ảnh gốc và ảnh sinh ra", "Ảnh có giữ nội dung không?"],
+        ["PSNR ↑", "10·log₁₀(255² / MSE) — sai lệch theo từng điểm ảnh", "Sai lệch nhiều hay ít?"],
+        ["EdgeRecall ↑", "Tách biên Canny cả hai ảnh, đếm % biên GỐC còn tìm thấy",
+         "Hình dáng vật thể còn nguyên? ⇒ nhãn còn dùng được?"],
+        ["FID ↓", "Khoảng cách phân bố đặc trưng InceptionV3 với ảnh mưa/tuyết THẬT",
+         "Ảnh sinh ra có giống ảnh chụp thật không?"],
+    ], [1.7, 5.8, 4.4], size=12, row_h=0.44)
+    text(s, Inches(0.7), Inches(6.3), Inches(11.9), Inches(0.8), [
+        ("Không phương pháp nào thắng tuyệt đối: bản đề xuất giữ nội dung tốt nhất (SSIM, PSNR), "
+         "còn AdaIN thuần thắng FID vì lớp phủ hạt là dấu vết tổng hợp bị Inception phạt.", 13, False, GREY),
+        ("⇒ Với ảnh dashcam nên giảm mật độ hạt — mưa thật qua kính chắn gió gần như không thấy vệt rời.",
+         13, True, NAVY),
+    ])
 
     # ---------- 13. Thí nghiệm YOLO ---------- #
     n += 1
@@ -382,42 +443,43 @@ def build() -> None:
          [("Hàng 'trời quang' là đối chứng: xác nhận việc thêm dữ liệu tăng cường "
            "không làm mô hình kém đi trên điều kiện bình thường.", 14, False, GREY)])
 
-    # ---------- 14. Hạn chế ---------- #
-    n += 1
-    s = blank(prs)
-    header(s, "Hạn chế & hướng phát triển", "", n)
-    card(s, Inches(0.7), Inches(1.5), Inches(5.85), Inches(4.9), "HẠN CHẾ",
-         "\n· AdaIN chuyển thống kê TOÀN CỤC nên chưa phân biệt vùng trời / mặt đường "
-         "— sương mù dày ở gần cũng như ở xa.\n\n"
-         "· Không có bản đồ độ sâu thật; module vật lý dùng giả thiết mặt đường phẳng.\n\n"
-         "· Chất lượng phụ thuộc ảnh tham chiếu: ảnh tham chiếu khác góc chụp quá nhiều "
-         "sẽ cho tông màu lệch.\n\n"
-         "· DAWN chỉ được dùng cho mục đích nghiên cứu, không dùng thương mại.", RGBColor(0xE4, 0x5A, 0x5A))
-    card(s, Inches(6.95), Inches(1.5), Inches(5.85), Inches(4.9), "HƯỚNG PHÁT TRIỂN",
-         "\n· Thêm mặt nạ phân vùng trời / đường để đổi tông theo từng vùng.\n\n"
-         "· Dùng mô hình ước lượng độ sâu đơn ảnh (Depth Anything) thay cho giả thiết phẳng.\n\n"
-         "· Thay AdaIN bằng AdaAttN / WCT² để bám cấu trúc tốt hơn.\n\n"
-         "· Thu thập ảnh tham chiếu thời tiết tại Việt Nam để khớp bối cảnh triển khai thực tế.\n\n"
-         "· Mở rộng sang ban đêm, chói nắng ngược, đèn pha.", TEAL)
-
-    # ---------- 15. Kết luận ---------- #
+    # ---------- 15. Kết luận & hướng phát triển ---------- #
     n += 1
     s = blank(prs)
     rect(s, 0, 0, W, H, NAVY)
-    rect(s, Inches(1.0), Inches(1.5), Inches(0.08), Inches(4.6), TEAL)
-    text(s, Inches(1.4), Inches(1.5), Inches(11.0), Inches(4.8), [
-        ("KẾT LUẬN", 34, True, WHITE),
-        ("", 10, False, WHITE),
-        ("· Xây dựng trọn vẹn pipeline sinh ảnh giao thông thời tiết xấu từ 2 ảnh đầu vào, "
-         "đúng yêu cầu đề bài.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("· Toàn bộ dùng mã nguồn mở; decoder chỉ 3,51 M tham số, huấn luyện 37 phút trên 1 GPU.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("· Nhãn bounding box tái sử dụng 100% — chi phí gán nhãn cho dữ liệu mới bằng 0.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("· Có kiểm chứng định lượng (SSIM/EdgeRecall/FID) và thí nghiệm downstream với YOLOv8.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("· Bàn giao: mã nguồn chạy được bằng 1 lệnh, web demo Gradio, mô hình đã huấn luyện,", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("   báo cáo và slide — toàn bộ số liệu sinh tự động từ kết quả thật.", 18, False, RGBColor(0xD5, 0xDE, 0xEC)),
-        ("", 10, False, WHITE),
-        ("Nhóm 6  —  Xin cảm ơn!", 24, True, TEAL),
-    ])
+    rect(s, 0, 0, W, Inches(1.0), RGBColor(0x0A, 0x12, 0x24))
+    rect(s, 0, Inches(1.0), W, Inches(0.05), TEAL)
+    text(s, Inches(0.8), Inches(0.2), Inches(11.7), Inches(0.7),
+         [("KẾT LUẬN & HƯỚNG PHÁT TRIỂN", 30, True, WHITE)])
+
+    rect(s, Inches(0.7), Inches(1.35), Inches(0.06), Inches(2.9), TEAL)
+    text(s, Inches(0.95), Inches(1.3), Inches(11.6), Inches(3.0), [
+        ("· Pipeline hoàn chỉnh sinh ảnh thời tiết xấu từ 2 ảnh đầu vào, đúng yêu cầu đề bài.", 16, False, RGBColor(0xD5, 0xDE, 0xEC)),
+        ("· Mã nguồn mở; chỉ 3,51 M tham số được học, huấn luyện 37 phút trên 1 GPU tiêu dùng.", 16, False, RGBColor(0xD5, 0xDE, 0xEC)),
+        ("· Nhãn bounding box tái sử dụng 100% — chi phí gán nhãn cho dữ liệu mới bằng 0.", 16, False, RGBColor(0xD5, 0xDE, 0xEC)),
+        ("· Kiểm chứng bằng thí nghiệm thật: mAP50 trên ảnh thời tiết xấu thật tăng +6,2%.", 16, False, RGBColor(0xD5, 0xDE, 0xEC)),
+        ("· Bàn giao mã nguồn chạy bằng 1 lệnh, web demo Gradio, báo cáo và slide.", 16, False, RGBColor(0xD5, 0xDE, 0xEC)),
+    ], spacing=1.22)
+
+    limits = ("· AdaIN chuyển thống kê TOÀN CỤC, chưa phân biệt vùng trời / mặt đường.\n"
+              "· Không có bản đồ độ sâu thật; module vật lý giả thiết mặt đường phẳng.\n"
+              "· Lớp phủ hạt làm giảm FID trên ảnh dashcam.\n"
+              "· DAWN chỉ dùng cho nghiên cứu, không dùng thương mại.")
+    future = ("· Thêm mặt nạ phân vùng trời / đường để đổi tông theo từng vùng.\n"
+              "· Dùng mô hình ước lượng độ sâu đơn ảnh (Depth Anything).\n"
+              "· Thay AdaIN bằng AdaAttN / WCT² để bám cấu trúc tốt hơn.\n"
+              "· Thu thập ảnh tham chiếu thời tiết tại Việt Nam.")
+    for x, title, body, col in ((Inches(0.7), "HẠN CHẾ", limits, RGBColor(0xE4, 0x5A, 0x5A)),
+                                (Inches(6.95), "HƯỚNG PHÁT TRIỂN", future, TEAL)):
+        rect(s, x, Inches(4.5), Inches(5.85), Inches(2.1), RGBColor(0x16, 0x22, 0x3C))
+        rect(s, x, Inches(4.5), Inches(0.06), Inches(2.1), col)
+        text(s, Emu(int(x + Inches(0.25))), Inches(4.65), Inches(5.4), Inches(1.95), [
+            (title, 14, True, col),
+            (body, 12, False, RGBColor(0xB6, 0xC2, 0xD9)),
+        ], spacing=1.15)
+
+    text(s, Inches(0.7), Inches(6.85), Inches(11.9), Inches(0.5),
+         [("Nhóm 6  —  Xin cảm ơn!", 20, True, TEAL)], align=PP_ALIGN.CENTER)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     prs.save(OUT)

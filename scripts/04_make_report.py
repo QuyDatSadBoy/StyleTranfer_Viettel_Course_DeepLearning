@@ -366,7 +366,7 @@ giãn, không xoay. Toạ độ mỗi vật thể trong ảnh đầu ra trùng k
 | Encoder | VGG-19 (ImageNet), **đóng băng** — 0 tham số học |
 | Decoder | 3,51 M tham số (phản chiếu VGG tới `relu4_1`, dùng ReflectionPad + Upsample nearest) |
 | Dữ liệu | {n_ct} ảnh nội dung × {n_style} ảnh tham chiếu, ghép cặp **ngẫu nhiên** mỗi bước |
-| Tiền xử lý | resize cạnh ngắn → 320, cắt ngẫu nhiên 256×256, lật ngang |
+| Tiền xử lý | Ảnh gốc 1280×720 → resize cạnh ngắn về 320 px → cắt ngẫu nhiên 256×256 → lật ngang ngẫu nhiên → chuẩn hoá [0,1] |
 | Batch / số bước | 8 / {steps:,} |
 | Optimizer | Adam, lr 1e-4, `lr_t = lr / (1 + 5e-5·t)` |
 | Mixed precision | bfloat16 (thống kê mean/std vẫn tính ở float32 để tránh sai số) |
@@ -420,6 +420,15 @@ lệch loại, không phản ánh chất lượng sinh ảnh.
 | Phương pháp | SSIM ↑ | PSNR ↑ | EdgeRecall ↑ | FID ↓ |
 |---|---|---|---|---|
 {metric_table}
+
+**Cách tính từng chỉ số.**
+
+| Chỉ số | Cách tính | Trả lời câu hỏi gì |
+|---|---|---|
+| **SSIM** ↑ | So cấu trúc cục bộ (độ sáng, tương phản, tương quan) giữa ảnh gốc và ảnh sinh ra | Ảnh có giữ nội dung không? |
+| **PSNR** ↑ | 10·log₁₀(255² / MSE) — sai lệch trung bình theo từng điểm ảnh | Sai lệch nhiều hay ít? |
+| **EdgeRecall** ↑ | Tách biên Canny của cả hai ảnh, đếm tỉ lệ biên của **ảnh gốc** còn tìm thấy trong ảnh sinh ra (nới 1 px) | Hình dáng vật thể còn nguyên? ⇒ nhãn còn dùng được? |
+| **FID** ↓ | Đưa hai tập ảnh qua InceptionV3 lấy vector 2048 chiều, tính ‖μ₁−μ₂‖² + Tr(Σ₁+Σ₂−2·√(Σ₁Σ₂)) | Ảnh sinh ra có giống ảnh chụp thật không? |
 
 **Cách đọc bảng.**
 

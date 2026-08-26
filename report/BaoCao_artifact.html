@@ -361,7 +361,7 @@ giãn, không xoay. Toạ độ mỗi vật thể trong ảnh đầu ra trùng k
 </tr>
 <tr>
 <td>Tiền xử lý</td>
-<td>resize cạnh ngắn → 320, cắt ngẫu nhiên 256×256, lật ngang</td>
+<td>Ảnh gốc 1280×720 → resize cạnh ngắn về 320 px → cắt ngẫu nhiên 256×256 → lật ngang ngẫu nhiên → chuẩn hoá [0,1]</td>
 </tr>
 <tr>
 <td>Batch / số bước</td>
@@ -456,6 +456,38 @@ lệch loại, không phản ánh chất lượng sinh ảnh.</p>
 <td><strong>14.61</strong></td>
 <td>0.4997</td>
 <td>164.38</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cách tính từng chỉ số.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Chỉ số</th>
+<th>Cách tính</th>
+<th>Trả lời câu hỏi gì</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SSIM</strong> ↑</td>
+<td>So cấu trúc cục bộ (độ sáng, tương phản, tương quan) giữa ảnh gốc và ảnh sinh ra</td>
+<td>Ảnh có giữ nội dung không?</td>
+</tr>
+<tr>
+<td><strong>PSNR</strong> ↑</td>
+<td>10·log₁₀(255² / MSE) — sai lệch trung bình theo từng điểm ảnh</td>
+<td>Sai lệch nhiều hay ít?</td>
+</tr>
+<tr>
+<td><strong>EdgeRecall</strong> ↑</td>
+<td>Tách biên Canny của cả hai ảnh, đếm tỉ lệ biên của <strong>ảnh gốc</strong> còn tìm thấy trong ảnh sinh ra (nới 1 px)</td>
+<td>Hình dáng vật thể còn nguyên? ⇒ nhãn còn dùng được?</td>
+</tr>
+<tr>
+<td><strong>FID</strong> ↓</td>
+<td>Đưa hai tập ảnh qua InceptionV3 lấy vector 2048 chiều, tính ‖μ₁−μ₂‖² + Tr(Σ₁+Σ₂−2·√(Σ₁Σ₂))</td>
+<td>Ảnh sinh ra có giống ảnh chụp thật không?</td>
 </tr>
 </tbody>
 </table>

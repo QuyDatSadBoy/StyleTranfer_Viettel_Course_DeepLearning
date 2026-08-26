@@ -148,7 +148,32 @@ Diễn giải: phép chia `(c − μ(c)) / σ(c)` xoá phong cách gốc (tông 
 và cộng `μ(s)` sau đó "nhuộm" đặc trưng bằng thống kê của ảnh thời tiết. Vì chỉ thống kê
 **theo kênh** bị thay đổi, bản đồ đặc trưng không hề bị dịch chuyển.
 
-Decoder — phần **duy nhất** được huấn luyện — dựng ngược đặc trưng đã nhuộm thành ảnh RGB.
+**Decoder — phần duy nhất được huấn luyện.**
+
+*Vì sao cần decoder?* VGG-19 chỉ biết **nén** ảnh thành đặc trưng, không có mạng nào giải nén
+ngược lại. Sau khi AdaIN nhuộm xong, ta đang cầm một khối đặc trưng 512 kênh ở độ phân giải
+1/8 chứ chưa phải ảnh — nên phải tự huấn luyện một mạng làm nhiệm vụ "bộ giải mã".
+
+*Kiến trúc.* Phản chiếu ngược VGG-19 tới `relu4_1`:
+
+```
+512 kênh @ 32×32   (1/8 độ phân giải)
+   ↓  9 lớp Conv 3×3 + ReLU,  3 lần Upsample ×2
+  3 kênh @ 256×256  (ảnh RGB)
+```
+
+Hai lựa chọn thiết kế đáng chú ý:
+
+- **ReflectionPad thay cho zero-padding** — đệm bằng cách soi gương pixel biên, tránh viền đen
+  ở rìa ảnh mà zero-padding hay tạo ra.
+- **Upsample `nearest` + Conv thay cho ConvTranspose** — ConvTranspose với stride 2 tạo ra
+  hiện tượng vệt caro (*checkerboard artifact*) do các cửa sổ chồng lấn không đều.
+
+Tổng cộng **3,51 triệu tham số**, bằng đúng số tham số của phần VGG-19 được dùng (tới `relu4_1`)
+vì hai mạng đối xứng nhau.
+
+*Điểm quan trọng:* decoder chỉ học cách **dựng ảnh từ đặc trưng**, nó **không** học riêng loại
+thời tiết nào. Đó là lý do thêm loại thời tiết mới không cần huấn luyện lại.
 
 Tham số `alpha` cho phép nội suy: `t = alpha · AdaIN(c,s) + (1−alpha) · c`, nhờ đó **một cặp
 ảnh sinh ra được nhiều mức thời tiết nặng/nhẹ khác nhau** — rất hữu ích để đa dạng hoá dữ liệu.

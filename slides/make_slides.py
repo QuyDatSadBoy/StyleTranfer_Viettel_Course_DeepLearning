@@ -237,43 +237,79 @@ def build() -> None:
     s = blank(prs)
     header(s, "Phương pháp — 3 khối nối tiếp", "Mỗi khối bù đúng một điểm yếu của khối trước", n)
     xs = [Inches(0.6), Inches(4.85), Inches(9.1)]
-    titles = ["① AdaIN  (học sâu)", "② Guided Filter", "③ Phủ hạt (vật lý)"]
+    titles = ["① AdaIN + Decoder", "② Guided Filter", "③ Phủ hạt (vật lý)"]
     bodies = [
-        "Chuẩn hoá đặc trưng VGG của ảnh gốc rồi nhuộm lại bằng mean/std của ảnh thời tiết.\n\n→ Đổi tông màu, độ sáng, độ mù toàn cục.",
+        "AdaIN nhuộm đặc trưng VGG của ảnh gốc bằng mean/std của ảnh thời tiết.\n\n"
+        "Decoder dựng đặc trưng đã nhuộm trở lại thành ảnh RGB — phần DUY NHẤT được huấn luyện.\n\n"
+        "→ Đổi tông màu, độ sáng, độ mù.",
         "Dùng ảnh gốc làm ảnh dẫn hướng, lọc tuyến tính cục bộ q = a·I + b.\n\n"
         "Bán kính lớn (32) → a, b mượt → đầu ra = ẢNH GỐC nhân trường tương phản + lệch màu.\n\n"
-        "→ Giữ 100% chi tiết ảnh chụp, chỉ đổi tông thời tiết.",
+        "→ Giữ 100% chi tiết ảnh chụp.",
         "Sinh vệt mưa (nhiễu + motion blur) và bông tuyết (3 lớp độ sâu), phủ theo chế độ screen.\n\n→ Thêm chi tiết cục bộ mà AdaIN không tạo ra được.",
     ]
     colors = [BLUE, TEAL, RGBColor(0xE4, 0x8A, 0x2E)]
     for x, t, b, c in zip(xs, titles, bodies, colors):
-        rect(s, x, Inches(1.5), Inches(3.65), Inches(3.3), LIGHT)
-        rect(s, x, Inches(1.5), Inches(3.65), Inches(0.09), c)
-        text(s, Emu(int(x + Inches(0.25))), Inches(1.75), Inches(3.2), Inches(3.0),
-             [(t, 17, True, NAVY), (b, 13, False, GREY)])
-    text(s, Inches(0.6), Inches(5.05), Inches(12.1), Inches(1.6), [
+        rect(s, x, Inches(1.45), Inches(3.65), Inches(3.6), LIGHT)
+        rect(s, x, Inches(1.45), Inches(3.65), Inches(0.09), c)
+        text(s, Emu(int(x + Inches(0.25))), Inches(1.68), Inches(3.2), Inches(3.4),
+             [(t, 17, True, NAVY), (b, 12, False, GREY)])
+    text(s, Inches(0.6), Inches(5.35), Inches(12.1), Inches(1.6), [
         ("Vì sao nhãn bounding box vẫn dùng lại được?", 19, True, NAVY),
         ("Cả 3 khối chỉ thay đổi GIÁ TRỊ MÀU tại từng pixel — không dịch chuyển, không co giãn, "
          "không xoay vật thể. Vị trí chiếc xe trong ảnh đầu ra trùng khít vị trí trong ảnh gốc, "
          "nên toàn bộ nhãn cũ được sao chép nguyên vẹn. Chi phí gán nhãn cho dữ liệu mới = 0.", 15, False, GREY),
     ])
 
-    # ---------- 5. AdaIN ---------- #
+    # ---------- 5. AdaIN + Decoder ---------- #
     n += 1
     s = blank(prs)
-    header(s, "① AdaIN — trái tim của phương pháp", "Huang & Belongie, ICCV 2017", n)
-    rect(s, Inches(0.7), Inches(1.5), Inches(11.9), Inches(1.35), NAVY)
-    text(s, Inches(0.7), Inches(1.78), Inches(11.9), Inches(1.0),
-         [("AdaIN(c, s)  =  σ(s) · ( c − μ(c) ) / σ(c)  +  μ(s)", 30, True, TEAL)],
+    header(s, "① Khối học sâu: AdaIN + Decoder",
+           "AdaIN trộn thống kê (0 tham số) · Decoder dựng lại ảnh (phần DUY NHẤT được học)", n)
+
+    rect(s, Inches(0.7), Inches(1.28), Inches(11.9), Inches(1.0), NAVY)
+    text(s, Inches(0.7), Inches(1.44), Inches(11.9), Inches(0.8),
+         [("AdaIN(c, s)  =  σ(s) · ( c − μ(c) ) / σ(c)  +  μ(s)", 26, True, TEAL)],
          align=PP_ALIGN.CENTER)
-    bullets(s, Inches(0.7), Inches(3.2), Inches(11.6), [
-        "**c = đặc trưng VGG của ảnh giao thông,  s = đặc trưng VGG của ảnh thời tiết.",
-        "Bước 1 — ( c − μ(c) ) / σ(c): xoá phong cách gốc (trời quang), giữ lại cấu trúc không gian.",
-        "Bước 2 — nhân σ(s), cộng μ(s): 'nhuộm' bằng thống kê của ảnh thời tiết.",
-        "**Chỉ đổi thống kê THEO KÊNH ⇒ bản đồ đặc trưng không bị dịch chuyển ⇒ giữ bố cục.",
-        "Không có tham số học nào trong AdaIN — chỉ Decoder (3,51 triệu tham số) được huấn luyện.",
-        "**Hệ quả: thời tiết mới chỉ cần đưa ảnh tham chiếu vào, KHÔNG huấn luyện lại.",
-    ], size=16, gap=0.6)
+
+    # -- cột trái: AdaIN --
+    rect(s, Inches(0.7), Inches(2.5), Inches(6.0), Inches(3.55), LIGHT)
+    rect(s, Inches(0.7), Inches(2.5), Inches(6.0), Inches(0.08), BLUE)
+    text(s, Inches(0.95), Inches(2.66), Inches(5.6), Inches(3.3), [
+        ("AdaIN — 0 THAM SỐ HỌC", 16, True, NAVY),
+        ("c = đặc trưng VGG ảnh giao thông", 12, False, GREY),
+        ("s = đặc trưng VGG ảnh thời tiết", 12, False, GREY),
+        ("Bước 1 — ( c − μ(c) ) / σ(c)", 13, True, BLUE),
+        ("     xoá phong cách gốc (tông trời quang),", 12, False, GREY),
+        ("     GIỮ NGUYÊN cấu trúc không gian", 12, False, GREY),
+        ("Bước 2 — nhân σ(s), cộng μ(s)", 13, True, BLUE),
+        ("     'nhuộm' bằng thống kê ảnh thời tiết", 12, False, GREY),
+        ("Chỉ đổi thống kê THEO KÊNH ⇒ bản đồ đặc trưng", 12, True, NAVY),
+        ("không bị dịch chuyển ⇒ giữ nguyên bố cục.", 12, True, NAVY),
+    ], spacing=0.98)
+
+    # -- cột phải: Decoder --
+    rect(s, Inches(7.0), Inches(2.5), Inches(5.6), Inches(3.55), LIGHT)
+    rect(s, Inches(7.0), Inches(2.5), Inches(5.6), Inches(0.08), RGBColor(0xE4, 0x8A, 0x2E))
+    text(s, Inches(7.25), Inches(2.66), Inches(5.2), Inches(3.3), [
+        ("DECODER — 3,51 M THAM SỐ, PHẦN DUY NHẤT ĐƯỢC HỌC", 14, True, NAVY),
+        ("Vì sao cần? VGG chỉ NÉN ảnh thành đặc trưng, không", 12, False, GREY),
+        ("có mạng nào giải nén ngược lại ⇒ phải tự huấn luyện.", 12, False, GREY),
+        ("Kiến trúc — phản chiếu ngược VGG-19", 13, True, RGBColor(0xE4, 0x8A, 0x2E)),
+        ("     512 kênh @ 32×32   (1/8 độ phân giải)", 12, False, GREY),
+        ("        ↓  9 lớp Conv 3×3 + ReLU", 12, False, GREY),
+        ("        ↓  3 lần Upsample ×2", 12, False, GREY),
+        ("     3 kênh @ 256×256   (ảnh RGB)", 12, False, GREY),
+        ("· ReflectionPad thay zero-pad → không có viền đen", 12, False, GREY),
+        ("· Upsample nearest thay ConvTranspose → không bị", 12, False, GREY),
+        ("   vệt caro (checkerboard artifact)", 12, False, GREY),
+    ], spacing=0.96)
+
+    text(s, Inches(0.7), Inches(6.25), Inches(11.9), Inches(0.9), [
+        ("Hệ quả quan trọng: AdaIN không chứa tham số nào, còn Decoder chỉ học cách "
+         "\"dựng ảnh từ đặc trưng\" — không học riêng loại thời tiết nào.", 14, True, NAVY),
+        ("⇒ Thêm loại thời tiết mới chỉ cần đưa ảnh tham chiếu vào, KHÔNG phải huấn luyện lại.",
+         14, False, GREY),
+    ])
 
     # ---------- 6. Tiền xử lý & huấn luyện ---------- #
     n += 1
